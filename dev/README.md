@@ -41,6 +41,11 @@ excluded and preserved on the Pi. `car/config.toml` is mirrored, so local
 settings replace the remote copy. Runtime data folders should be added to the
 exclusions when their locations are defined.
 
+The Pi also needs Python 3 to publish the generated `system/version.toml` record
+after a successful transfer. Sync uses a frozen local snapshot and content
+checksums. Dry runs and key setup do not publish a record. See
+[version tracking](../docs/versioning.md) for release tags and record fields.
+
 New SSH host keys are accepted and saved; changed keys are rejected. Sync does
 not restart the car, install dependencies, or flash the Arduino. A dry run does
 not transfer or delete files, but may create the destination directory and save

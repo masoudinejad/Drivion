@@ -8,8 +8,14 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
+if __package__:
+    from . import versioning
+else:
+    import versioning
 TOOLS_DIR = Path(__file__).resolve().parent
 CAR_DIR = TOOLS_DIR.parents[1] / "car"
 EXCLUDES = (
@@ -22,6 +28,7 @@ EXCLUDES = (
     ".pytest_cache/",
     ".ruff_cache/",
     ".ssh/",
+    "/system/version.toml",
 )
 
 
@@ -45,7 +52,7 @@ def read_settings(path):
     return settings
 
 
-def build_command(settings, dry_run=False, password=False):
+def build_command(settings, dry_run=False, password=False, source=None):
     for key in ("PI_HOST", "PI_USER"):
         if not settings.get(key):
             raise ValueError(f"Set {key} in dev/sync/.env")
@@ -65,7 +72,7 @@ def build_command(settings, dry_run=False, password=False):
     if settings.get("PI_SSH_PUBLIC_KEY") and not password:
         key = public_key_path(settings["PI_SSH_PUBLIC_KEY"])
         ssh += " -o IdentitiesOnly=yes -i " + shlex.quote(str(key))
-    command = ["rsync", "-rlptz", "--delete", "--itemize-changes"]
+    command = ["rsync", "-rlptz", "--checksum", "--delete", "--itemize-changes"]
     if password:
         command = ["sshpass", "-e"] + command
     if dry_run:
@@ -78,11 +85,52 @@ def build_command(settings, dry_run=False, password=False):
             ssh,
             "--rsync-path",
             f"test ! -L /home/{user} && test ! -L {destination} && mkdir -p {destination} && rsync",
-            str(CAR_DIR) + "/",
+            str(source or CAR_DIR) + "/",
             f"{user}@{host}:{destination}/",
         ]
     )
     return command
+
+
+def sync_versioned(settings, environment, dry_run=False, password=False):
+    record = versioning.git_version(CAR_DIR.parent)
+    with tempfile.TemporaryDirectory(prefix="drivion-car-") as directory:
+        snapshot = Path(directory) / "car"
+        versioning.snapshot_car(CAR_DIR, snapshot, EXCLUDES)
+        record["checksum_sha256"] = versioning.snapshot_checksum(snapshot)
+        command = build_command(settings, dry_run, password, snapshot)
+        result = subprocess.run(command, env=environment, check=False)
+        if result.returncode or dry_run:
+            return result.returncode
+        record["deployed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        content = versioning.version_toml(record)
+        ssh = shlex.split(command[command.index("--rsync-path") - 1])
+        destination = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
+        ssh.extend(
+            [
+                f"{settings['PI_USER']}@{settings['PI_HOST']}",
+                "python3 -c "
+                + shlex.quote(versioning.PUBLISH_SCRIPT)
+                + " "
+                + shlex.quote(destination),
+            ]
+        )
+        if password:
+            ssh = ["sshpass", "-e"] + ssh
+        result = subprocess.run(
+            ssh, input=content, text=True, env=environment, check=False
+        )
+        if result.returncode:
+            print(
+                "Code transferred, but publishing the version record failed.",
+                file=sys.stderr,
+            )
+            return result.returncode
+        # Keep a local copy of the last successfully published deployment record.
+        destination = CAR_DIR / versioning.VERSION_PATH
+        destination.write_text(content)
+        print(f"Deployed {record['version']} (dirty={record['dirty']})", flush=True)
+        return 0
 
 
 def public_key_path(value):
@@ -152,6 +200,8 @@ def main(argv=None):
             if use_password:
                 command = ["sshpass", "-e"] + command
         required = ["ssh", "ssh-copy-id" if args.setup_ssh_key else "rsync"]
+        if not args.setup_ssh_key:
+            required.append("git")
         if use_password:
             required.append("sshpass")
         for executable in required:
@@ -174,17 +224,20 @@ def main(argv=None):
             else ("Previewing car sync..." if args.dry_run else "Syncing car folder...")
         )
         print(message, flush=True)
-        result = subprocess.run(command, env=environment, check=False)
-        if result.returncode:
-            print(f"Command failed (exit code {result.returncode}).", file=sys.stderr)
-        return result.returncode
+        if args.setup_ssh_key:
+            status = subprocess.run(command, env=environment, check=False).returncode
+        else:
+            status = sync_versioned(settings, environment, args.dry_run, args.password)
+        if status:
+            print(f"Command failed (exit code {status}).", file=sys.stderr)
+        return status
     except FileNotFoundError:
         print(
             "Create dev/sync/.env from .env.example and fill in the Pi connection settings.",
             file=sys.stderr,
         )
         return 1
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
         print(f"Sync error: {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
