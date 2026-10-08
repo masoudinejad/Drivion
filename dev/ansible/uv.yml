@@ -1,0 +1,78 @@
+- name: Identify the target architecture
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+    filter:
+      - ansible_architecture
+
+- name: Require the supported ARM64 architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.architecture == 'aarch64'
+    fail_msg: This pinned uv release supports ARM64 Raspberry Pi OS only.
+
+- name: Inspect the currently installed uv version
+  become: false
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/uv
+      - --version
+  register: current_uv
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Preview uv installation
+  ansible.builtin.debug:
+    msg: "Install uv {{ uv_version }} and uvx into /usr/local/bin from the checksum-verified official ARM64 archive."
+  changed_when: current_uv.rc != 0 or current_uv.stdout.split()[:2] != ['uv', uv_version]
+  when: ansible_check_mode
+
+- name: Install the pinned uv release
+  when: not ansible_check_mode
+  block:
+    - name: Create the versioned uv directory
+      ansible.builtin.file:
+        path: "{{ uv_install_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download the official uv archive and verify its pinned checksum
+      ansible.builtin.get_url:
+        url: "{{ uv_release_url }}/{{ uv_archive_name }}.tar.gz"
+        dest: "{{ uv_install_directory }}/uv.tar.gz"
+        checksum: "sha256:{{ uv_archive_sha256 }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Extract the verified uv archive
+      ansible.builtin.unarchive:
+        src: "{{ uv_install_directory }}/uv.tar.gz"
+        dest: "{{ uv_install_directory }}"
+        remote_src: true
+        creates: "{{ uv_install_directory }}/{{ uv_archive_name }}/uv"
+
+    - name: Install uv and uvx for all users
+      ansible.builtin.copy:
+        src: "{{ uv_install_directory }}/{{ uv_archive_name }}/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - uv
+        - uvx
+
+    - name: Verify uv is usable by the car user
+      become: false
+      ansible.builtin.command:
+        argv:
+          - uv
+          - --version
+      register: installed_uv
+      changed_when: false
+      failed_when: installed_uv.rc != 0 or installed_uv.stdout.split()[:2] != ['uv', uv_version]

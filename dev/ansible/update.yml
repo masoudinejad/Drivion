@@ -1,0 +1,41 @@
+- name: Prepare Raspberry Pi system
+  hosts: raspberry_pi
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Refresh the apt package index
+      ansible.builtin.apt:
+        update_cache: true
+        lock_timeout: 120
+        auto_install_module_deps: false
+
+    - name: Upgrade installed packages
+      ansible.builtin.apt:
+        upgrade: safe
+        force_apt_get: true
+        fail_on_autoremove: true
+        lock_timeout: 120
+        auto_install_module_deps: false
+
+    - name: Install system packages
+      ansible.builtin.import_tasks: packages.yml
+
+    - name: Install uv
+      ansible.builtin.import_tasks: uv.yml
+
+    - name: Create the configured car Python environment
+      ansible.builtin.import_tasks: environment.yml
+
+    - name: Check the reboot-required marker
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_marker
+
+    - name: Report reboot status
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'A reboot is requested by the system. Reboot manually when ready.'
+             if reboot_marker.stat.exists
+             else 'No reboot-required marker detected. No automatic reboot performed.' }}

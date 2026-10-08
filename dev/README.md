@@ -3,6 +3,10 @@
 Sync utilities live in `sync/`; formatting tools live in `quality/`.
 Tests live separately in the repository-level `tests/` folder.
 
+Raspberry Pi maintenance automation lives in `ansible/`. See the
+[Ansible instructions](ansible/README.md) for updates and upgrades using the
+existing local connection settings.
+
 Development and debugging utilities live here, with independent uv dependencies.
 
 ## Sync the car code to a Raspberry Pi

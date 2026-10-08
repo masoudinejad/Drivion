@@ -29,23 +29,23 @@ will be defined in later steps.
 
 ## Car environment and startup
 
-On Raspberry Pi OS, from `car/`:
+Provision from the local repository using the Pi settings in `dev/sync/.env`:
 
 ```sh
-sudo apt install python3-picamera2
-uv venv --python /usr/bin/python3 --system-site-packages system/.venv
-uv sync --project system
-./drive.py
+uv run --project dev python dev/ansible/run.py
 ```
 
-The environment inherits OS-managed Picamera2 and camera dependencies.
-Additional Python dependencies belong in `car/system/pyproject.toml`; avoid
-overriding camera stack packages with uv packages. The system Python version
-must satisfy the project requirements.
+Ansible syncs the car code and creates `system/env/drivion` under the deployed
+car folder, using `/usr/bin/python3` and `--system-site-packages` for Picamera2.
+The environment name and relative path are defined in `car/config.toml` under
+`system.python_environment`. Dependencies and their lockfile live in
+`car/system/`. The supported target is 64-bit Raspberry Pi OS with Python 3.13.
+NumPy matches the OS camera stack; torch and torchvision use the CPU wheel index.
 
-Run `./drive.py` from `car/`. Its shebang selects the prepared environment
-through uv without activation. It uses `--no-sync` so starting the car does not
-install or update dependencies. The entry point is currently a placeholder.
+On the Pi, run `~/car/drive.py` from any directory. The system-Python shebang
+starts a small bootstrap which reads the TOML configuration and executes the
+configured environment's Python. No activation or dependency installation occurs
+at startup. Driving functionality is currently a placeholder.
 
 Each Python use case has its own dependencies and lockfile. Virtual environments
 are created locally and ignored by Git. Model development and tools can be

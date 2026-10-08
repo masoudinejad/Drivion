@@ -1,0 +1,129 @@
+- name: Sync current car configuration and locked dependencies
+  become: false
+  delegate_to: localhost
+  vars:
+    ansible_python_interpreter: "{{ controller_python }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ controller_python }}"
+      - "{{ controller_root }}/dev/sync/sync_car.py"
+  when: not ansible_check_mode
+  changed_when: true
+
+- name: Preview the configured environment
+  ansible.builtin.debug:
+    msg: "Provision {{ car_environment_path }} with /usr/bin/python3 and system-site-packages, then sync frozen car dependencies."
+  when: ansible_check_mode
+
+- name: Provision and verify the car environment
+  become: false
+  when: not ansible_check_mode
+  block:
+    - name: Read the car environment path from deployed TOML
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ car_root }}/system/environment.py"
+          - "{{ car_root }}"
+      register: configured_environment
+      changed_when: false
+      failed_when: configured_environment.stdout != car_environment_path
+
+    - name: Create the environment parent directory
+      ansible.builtin.file:
+        path: "{{ car_root }}/system/env"
+        state: directory
+        mode: "0755"
+
+    - name: Create the named environment from system Python
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/uv
+          - venv
+          - --python
+          - /usr/bin/python3
+          - --system-site-packages
+          - --prompt
+          - "{{ car_environment_name }}"
+          - "{{ car_environment_path }}"
+        creates: "{{ car_environment_path }}/pyvenv.cfg"
+
+    - name: Verify the environment inherits the system Python packages
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - >-
+            import pathlib, sys;
+            cfg = (pathlib.Path(sys.argv[1]) / 'pyvenv.cfg').read_text();
+            assert 'include-system-site-packages = true' in cfg;
+            assert 'home = /usr/bin' in cfg, 'Environment must use OS Python'
+          - "{{ car_environment_path }}"
+      changed_when: false
+
+    - name: Install the locked Python dependencies
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/uv
+          - sync
+          - --project
+          - "{{ car_root }}/system"
+          - --frozen
+          - --python
+          - /usr/bin/python3
+          - --no-python-downloads
+      environment:
+        UV_PROJECT_ENVIRONMENT: "{{ car_environment_path }}"
+        UV_CONCURRENT_DOWNLOADS: "2"
+        UV_CONCURRENT_BUILDS: "1"
+        UV_CONCURRENT_INSTALLS: "1"
+      register: environment_sync
+      changed_when: "'Installed ' in environment_sync.stderr or 'Uninstalled ' in environment_sync.stderr"
+
+    - name: Verify installed dependency consistency
+      ansible.builtin.command:
+        argv:
+          - /usr/local/bin/uv
+          - pip
+          - check
+          - --python
+          - "{{ car_environment_path }}/bin/python"
+      changed_when: false
+
+    - name: Verify each runtime import independently
+      ansible.builtin.command:
+        argv:
+          - "{{ car_environment_path }}/bin/python"
+          - -c
+          - "import importlib; importlib.import_module('{{ item }}'); print('{{ item }} OK')"
+      environment:
+        OMP_NUM_THREADS: "1"
+        OPENBLAS_NUM_THREADS: "1"
+        TF_NUM_INTEROP_THREADS: "1"
+        TF_NUM_INTRAOP_THREADS: "1"
+      changed_when: false
+      loop:
+        - picamera2
+        - libcamera
+        - pandas
+        - cv2
+        - sklearn
+        - tensorflow
+        - onnxruntime
+        - xgboost
+        - lightgbm
+        - art
+        - serial
+        - evdev
+        - tzlocal
+        - dotenv
+        - ai_edge_litert.interpreter
+        - torch
+        - torchvision
+
+    - name: Verify the executable car entry point from outside the car directory
+      ansible.builtin.command:
+        argv:
+          - "{{ car_root }}/drive.py"
+        chdir: /tmp
+      changed_when: false
