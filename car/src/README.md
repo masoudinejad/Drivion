@@ -18,13 +18,16 @@ copy while retaining other settings and leaving the original unchanged:
 
 ```python
 from car.src.config import load_config
+from car.src.camera.camera import Camera
 
 config = load_config()
 camera_config = config.camera.with_overrides(
     channels="y",
     frame_rate=30.0,
 )
-# When the capture class is implemented: Camera(camera_config)
+with Camera(camera_config) as camera:
+    frame = camera.single_capture()
+    camera.save_capture("test_frame")
 
 # Revalidate the root when a change affects multiple sections:
 config = config.with_overrides(camera=camera_config)
@@ -53,9 +56,44 @@ index and orientation are not configurable. The initial camera implementation
 will use the default camera and its default orientation. New configuration
 fields can be added when a concrete requirement arises.
 
-This stage implements configuration and validation only. Applying sensor settings,
-capture, RGB/Y extraction, padding and NumPy/JPEG saving will be implemented
-in the camera
-module. Advertised sensor FPS is not a guarantee of end-to-end processing speed.
+## Camera capture
+
+`Camera(config.camera)` configures and starts the default camera without a preview.
+It applies the sensor dimensions directly, leaving bit depth at the system default.
+It checks the applied sensor/stream dimensions and the frame-duration limits,
+rejecting unsupported settings instead of silently substituting a different mode.
+It does not enumerate modes or choose a frame rate automatically.
+
+The ISP scales the configured sensor view to fit the output dimensions. Frames
+with a different aspect ratio receive black padding; all sensor content is kept.
+Even stream dimensions can introduce a small aspect-ratio rounding error.
+RGB capture uses Picamera2's `BGR888` format, which yields RGB arrays in memory.
+Y capture extracts only luminance, excluding chroma and row padding.
+Each returned frame owns its memory. `current_img` refers to the latest returned
+frame, and `capture_count` counts successful captures.
+
+Automatic exposure is enabled with equal minimum and maximum frame durations.
+Four buffers are used internally, with cached-frame queuing disabled. Capture
+waits for a completed frame, without promising when its exposure began.
+Use a context manager or `close()` to release the device. Camera operations are
+not thread-safe. Application logging settings are left unchanged.
+
+`save_capture(path)` captures and saves synchronously in the configured format.
+`save_frame(frame, path, config)` saves an existing frame. Missing extensions are
+supplied; conflicting extensions are rejected. Parent folders must already exist.
+JPEG uses quality 95. Continuous recording should manage its own saving queue.
+
+Run the benchmark from the repository root in the car's Python environment:
+
+```sh
+python -m car.src.camera.fast_cam_test --seconds 10
+python -m car.src.camera.fast_cam_test --channels y --save-frames captures
+python -m car.src.camera.fast_cam_test --format jpeg --save test_frame
+```
+
+The benchmark loads TOML and applies only explicitly supplied CLI overrides.
+Optional saving is synchronous and included in measured throughput. Hardware
+sensor FPS, actual exposure timing and full FOV must be verified on the Pi;
+benchmark loop throughput alone does not establish those properties.
 
 Reference: [Picamera2 manual](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf).
