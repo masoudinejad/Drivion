@@ -1,22 +1,17 @@
 # Central settings shared by the driving application and system tools.
-# Values will be defined when hardware and application requirements are known.
 
 [system.python_environment]
 name = "drivion"
 path = "system/env/drivion"
 
-[arduino.communication]
-
-[arduino.flashing]
-
 [camera]
-
-[joystick]
-
-[drive]
-
-[inference]
-
-[recording]
-
-[logging]
+# Automatic exposure is always enabled; sensor bit depth uses system defaults.
+# Output dimensions are independent of sensor resolution.
+width = 640
+height = 480
+channels = "rgb" # "rgb" or "y" (luminance)
+file_format = "numpy" # "numpy" (.npy) or "jpeg" (.jpg)
+# Explicit Camera v2 full-FOV sensor settings, independent of output size.
+sensor_width = 1640
+sensor_height = 1232
+frame_rate = 41.0 # Frames per second
