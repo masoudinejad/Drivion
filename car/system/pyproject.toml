@@ -47,3 +47,21 @@ xgboost-cpu = "xgboost"
 pyserial = "serial"
 python-dotenv = "dotenv"
 ai-edge-litert = "ai_edge_litert.interpreter"
+
+[tool.drivion.provisioning]
+packages = [
+    "python3-picamera2",
+    "python3-venv",
+    "python3-apt",
+    "rpicam-apps-lite",
+    "rsync",
+    "curl",
+    "wget",
+    "ca-certificates",
+    "git",
+    "python3-dev",
+    "build-essential",
+    "linux-libc-dev",
+    "libgomp1",
+]
+system_imports = ["picamera2", "libcamera"]

@@ -21,10 +21,12 @@ It preserves existing configuration files using the apt module defaults.
 It does not perform a distribution upgrade, autoremove packages, or reboot.
 Package upgrades may restart affected services.
 
-System packages are declared in `car/config.toml` under `system.packages`.
+System packages are declared in `car/system/pyproject.toml` under
+`tool.drivion.provisioning.packages`.
 The runner reads and validates this list before creating the Ansible inventory.
 Optional desktop recommendations are disabled; apt installs required dependencies.
-System camera imports are declared under `system.system_imports` and verified
+System camera imports are declared in the same file under
+`tool.drivion.provisioning.system_imports` and verified
 inside the configured environment with access to system packages.
 
 It installs uv and uvx into `/usr/local/bin`, using the pinned official ARM64

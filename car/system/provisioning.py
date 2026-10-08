@@ -1,4 +1,4 @@
-"""Read and validate system provisioning settings from the car config."""
+"""Read and validate system provisioning settings from the project metadata."""
 
 import re
 from pathlib import Path
@@ -7,8 +7,13 @@ import tomllib
 
 
 def system_settings(car_root):
-    with (Path(car_root) / "config.toml").open("rb") as stream:
-        system = tomllib.load(stream).get("system", {})
+    with (Path(car_root) / "system/pyproject.toml").open("rb") as stream:
+        system = (
+            tomllib.load(stream)
+            .get("tool", {})
+            .get("drivion", {})
+            .get("provisioning", {})
+        )
     packages = system.get("packages")
     modules = system.get("system_imports")
     for name, values, pattern in (
@@ -19,5 +24,7 @@ def system_settings(car_root):
             not isinstance(value, str) or not re.fullmatch(pattern, value)
             for value in values
         ):
-            raise ValueError(f"Configure system.{name} as a list of valid names")
+            raise ValueError(
+                f"Configure tool.drivion.provisioning.{name} as a list of valid names"
+            )
     return packages, modules

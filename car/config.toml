@@ -1,24 +1,6 @@
 # Central settings shared by the driving application and system tools.
 # Values will be defined when hardware and application requirements are known.
 
-[system]
-packages = [
-    "python3-picamera2",
-    "python3-venv",
-    "python3-apt",
-    "rpicam-apps-lite",
-    "rsync",
-    "curl",
-    "wget",
-    "ca-certificates",
-    "git",
-    "python3-dev",
-    "build-essential",
-    "linux-libc-dev",
-    "libgomp1",
-]
-system_imports = ["picamera2", "libcamera"]
-
 [system.python_environment]
 name = "drivion"
 path = "system/env/drivion"

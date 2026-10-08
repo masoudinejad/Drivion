@@ -11,13 +11,11 @@ from car.system.provisioning import system_settings
 
 def configure(root, dependencies, mappings=""):
     (root / "system").mkdir(exist_ok=True)
-    (root / "config.toml").write_text(
-        '[system]\npackages=["python3-picamera2"]\nsystem_imports=["libcamera"]\n'
-    )
     (root / "system/pyproject.toml").write_text(
         "[project]\ndependencies=["
         + ",".join(repr(value) for value in dependencies)
         + "]\n"
+        '[tool.drivion.provisioning]\npackages=["python3-picamera2"]\nsystem_imports=["libcamera"]\n'
         "[tool.drivion.verification.imports]\n" + mappings
     )
 
@@ -80,8 +78,9 @@ def test_successful_verification(tmp_path):
 
 
 def test_invalid_system_package_rejected(tmp_path):
-    (tmp_path / "config.toml").write_text(
-        '[system]\npackages=["--bad"]\nsystem_imports=[]\n'
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system/pyproject.toml").write_text(
+        '[tool.drivion.provisioning]\npackages=["--bad"]\nsystem_imports=[]\n'
     )
     with pytest.raises(ValueError, match="packages"):
         system_settings(tmp_path)

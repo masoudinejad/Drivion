@@ -67,10 +67,10 @@ def test_missing_sudo_password_prevents_execution():
         execute.assert_not_called()
 
 
-def test_inventory_reads_system_packages_from_car_config():
-    configured = tomllib.loads((run.ROOT / "car/config.toml").read_text())["system"][
-        "packages"
-    ]
+def test_inventory_reads_system_packages_from_pyproject():
+    configured = tomllib.loads((run.ROOT / "car/system/pyproject.toml").read_text())[
+        "tool"
+    ]["drivion"]["provisioning"]["packages"]
     inventory = run.build_inventory({"PI_HOST": "pi.local", "PI_USER": "driver"})
     host = inventory["all"]["children"]["raspberry_pi"]["hosts"]["car"]
     assert host["system_packages"] == configured
