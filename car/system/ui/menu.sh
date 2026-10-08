@@ -94,7 +94,7 @@ drivion_menu() (
         else
             printf '\n    %sBack%s\n' "$amber" "$reset" >&3
         fi
-        printf '\n  %s↑/↓ move · Enter select · Esc back%s\n' "$dim" "$reset" >&3
+        printf '\n  %s[↑/↓] Move    [Enter] Select%s\n' "$dim" "$reset" >&3
 
         if ! IFS= read -r -n 1 -u 3 key; then
             return 1

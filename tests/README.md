@@ -1,7 +1,7 @@
 # Tests
 
 Tests mirror the project structure: development-tool tests live under `dev/`,
-and car system tests live under `car/system/`.
+and car system tests live under `car/system/ui/`.
 
 Install the development environment and run the suite from the repository root:
 
@@ -10,7 +10,7 @@ uv sync --project dev
 uv run --project dev pytest
 ```
 
-Run a subset with `uv run --project dev pytest tests/car/system` or
+Run a subset with `uv run --project dev pytest tests/car/system/ui` or
 `uv run --project dev pytest tests/dev`.
 
 The suite uses local temporary files and pseudo-terminals. It does not connect

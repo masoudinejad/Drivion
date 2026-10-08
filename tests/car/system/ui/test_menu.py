@@ -12,7 +12,7 @@ import time
 import unittest
 from pathlib import Path
 
-MENU = Path(__file__).resolve().parents[3] / "car/system/menu.sh"
+MENU = Path(__file__).resolve().parents[4] / "car/system/ui/menu.sh"
 
 
 class MenuTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class MenuTests(unittest.TestCase):
                 if not chunk:
                     break
                 output += chunk
-                if not sent and b"Enter select" in output:
+                if not sent and b"[Enter] Select" in output:
                     os.write(terminal, keys)
                     sent = True
             else:
