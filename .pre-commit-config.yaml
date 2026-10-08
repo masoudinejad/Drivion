@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: format-all
+        name: Format and lint all project files
+        entry: uv run --project dev_tools python dev_tools/format_all.py
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -211,6 +211,10 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Local SSH public-key selection for development tools
+dev_tools/.ssh/
+node_modules/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
