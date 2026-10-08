@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from system.environment import environment_path
+from system.ui.startup import show_startup
 
 
 def enter_environment():
@@ -31,7 +32,7 @@ def enter_environment():
 
 
 def main():
-    print("Drivion structure is ready. Driving functionality is not implemented yet.")
+    show_startup()
 
 
 if __name__ == "__main__":
