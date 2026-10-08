@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import sync_car
+from dev.sync import sync_car
 
 
 class SyncTests(unittest.TestCase):

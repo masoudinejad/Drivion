@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 CPP_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ino"}
 
 
@@ -38,10 +38,10 @@ def main():
             ["ruff", "format", *(["--check"] if args.check else []), *python]
         )
     if markdown:
-        executable = ROOT / "dev_tools/node_modules/.bin/markdownlint-cli2"
+        executable = ROOT / "dev/node_modules/.bin/markdownlint-cli2"
         if not executable.exists():
             print(
-                "Run npm ci --prefix dev_tools to install markdownlint.",
+                "Run npm ci --prefix dev to install markdownlint.",
                 file=sys.stderr,
             )
             return 1
@@ -63,7 +63,7 @@ def main():
         try:
             failed |= subprocess.run(command, cwd=ROOT, check=False).returncode != 0
         except FileNotFoundError:
-            print("Run this tool through uv run --project dev_tools.", file=sys.stderr)
+            print("Run this tool through uv run --project dev.", file=sys.stderr)
             return 1
     return int(failed)
 

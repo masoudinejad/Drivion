@@ -12,7 +12,7 @@ import time
 import unittest
 from pathlib import Path
 
-MENU = Path(__file__).resolve().parent.parent / "car/system/menu.sh"
+MENU = Path(__file__).resolve().parents[3] / "car/system/menu.sh"
 
 
 class MenuTests(unittest.TestCase):

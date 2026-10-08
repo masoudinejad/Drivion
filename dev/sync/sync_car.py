@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent
-CAR_DIR = TOOLS_DIR.parent / "car"
+CAR_DIR = TOOLS_DIR.parents[1] / "car"
 EXCLUDES = (
     ".venv/",
     "__pycache__/",
@@ -48,7 +48,7 @@ def read_settings(path):
 def build_command(settings, dry_run=False, password=False):
     for key in ("PI_HOST", "PI_USER"):
         if not settings.get(key):
-            raise ValueError(f"Set {key} in dev_tools/.env")
+            raise ValueError(f"Set {key} in dev/sync/.env")
     host, user = settings["PI_HOST"], settings["PI_USER"]
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*", host):
         raise ValueError("PI_HOST must be an IPv4 address or hostname")
@@ -146,7 +146,7 @@ def main(argv=None):
             args.setup_ssh_key and bool(settings.get("PI_PASSWORD"))
         )
         if use_password and not settings.get("PI_PASSWORD"):
-            raise ValueError("Set PI_PASSWORD in dev_tools/.env to use --password")
+            raise ValueError("Set PI_PASSWORD in dev/sync/.env to use --password")
         if args.setup_ssh_key:
             command = build_key_command(settings, args.public_key)
             if use_password:
@@ -180,7 +180,7 @@ def main(argv=None):
         return result.returncode
     except FileNotFoundError:
         print(
-            "Create dev_tools/.env from .env.example and fill in the Pi connection settings.",
+            "Create dev/sync/.env from .env.example and fill in the Pi connection settings.",
             file=sys.stderr,
         )
         return 1

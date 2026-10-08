@@ -1,5 +1,8 @@
 # Development tools
 
+Sync utilities live in `sync/`; formatting tools live in `quality/`.
+Tests live separately in the repository-level `tests/` folder.
+
 Development and debugging utilities live here, with independent uv dependencies.
 
 ## Sync the car code to a Raspberry Pi
@@ -9,27 +12,27 @@ ssh-copy-id. Password automation additionally requires sshpass. The Pi needs SSH
 enabled and rsync installed (`sudo apt install rsync`). Initial key setup needs
 a working login method, usually password authentication.
 
-Copy `.env.example` to `.env` in this folder and fill in `PI_HOST` and
+Copy `sync/.env.example` to `sync/.env` and fill in `PI_HOST` and
 `PI_USER`. `PI_PASSWORD` is optional for normal key-based sync. `PI_CAR_PATH`
 defaults to `/home/driver/car` with `PI_USER=driver`. Local `car/drive.py`
 becomes `/home/driver/car/drive.py`. The destination is restricted to
 `/home/<PI_USER>/car`; the home and destination folders must not be symlinks.
 
 The `.env` file is ignored by Git. Restrict its permissions with `chmod 600
-dev_tools/.env`. Passwords are literal values; quote them if they have leading
+dev/sync/.env`. Passwords are literal values; quote them if they have leading
 or trailing spaces. They are passed to sshpass through its environment, never
 command arguments.
 
 From the repository root:
 
 ```sh
-./dev_tools/sync_car.py --dry-run
-./dev_tools/sync_car.py
+./dev/sync/sync_car.py --dry-run
+./dev/sync/sync_car.py
 ```
 
 The script also works from other directories. It uses only Python's standard
 library, so environment activation is unnecessary. Alternatively, run `uv run
---project dev_tools dev_tools/sync_car.py` from the repository root.
+--project dev dev/sync/sync_car.py` from the repository root.
 
 Only `car/` is transferred. Changed files and deletions are shown, executable
 permissions are preserved, and missing destination directories are created.
@@ -59,17 +62,17 @@ For pass-cli, run `pass-cli ssh-agent daemon status` to find its socket. Set
 inherit it. The pass-cli daemon must be running for key authentication.
 
 Set `PI_SSH_PUBLIC_KEY` to an exported `.pub` file to select a specific agent
-identity. Relative paths are resolved from `dev_tools/`. Normal sync then uses
+identity. Relative paths are resolved from `dev/sync/`. Normal sync then uses
 `IdentitiesOnly=yes`; key setup installs only this public key. Private keys
 remain in the agent. Local public-key files can be kept in the Git-ignored
-`dev_tools/.ssh/` directory.
+`dev/sync/.ssh/` directory.
 
 Install an existing public key once:
 
 ```sh
-./dev_tools/sync_car.py --setup-ssh-key
+./dev/sync/sync_car.py --setup-ssh-key
 # Or select an exported public key explicitly:
-./dev_tools/sync_car.py --setup-ssh-key --public-key ~/.ssh/id_ed25519.pub
+./dev/sync/sync_car.py --setup-ssh-key --public-key ~/.ssh/id_ed25519.pub
 ```
 
 Without a selected public key, ssh-copy-id selects keys from your SSH agent or
@@ -82,7 +85,7 @@ prompts through SSH. Keep `PI_PASSWORD` empty to use your normal interactive
 login for setup.
 
 Then run the usual sync command. No Pi password in `.env` is required. To
-explicitly use the stored Pi password instead, run `./dev_tools/sync_car.py
+explicitly use the stored Pi password instead, run `./dev/sync/sync_car.py
 --password`. Key setup only installs the public key; it does not also sync code.
 
 ## Formatting and commit checks
@@ -90,9 +93,9 @@ explicitly use the stored Pi password instead, run `./dev_tools/sync_car.py
 Install the development tools and Git hook from the repository root:
 
 ```sh
-uv sync --project dev_tools
-npm ci --prefix dev_tools
-uv run --project dev_tools pre-commit install
+uv sync --project dev
+npm ci --prefix dev
+uv run --project dev pre-commit install
 ```
 
 Every commit runs formatting and linting across all tracked and non-ignored
@@ -106,11 +109,24 @@ block commits.
 Run the same checks manually:
 
 ```sh
-uv run --project dev_tools python dev_tools/format_all.py
-uv run --project dev_tools python dev_tools/format_all.py --check
+uv run --project dev python dev/quality/format_all.py
+uv run --project dev python dev/quality/format_all.py --check
 ```
 
 The `--check` option does not edit files. Markdown line wrapping and other
 issues without automatic fixes need manual corrections. Tool versions are locked
 in `uv.lock` and `package-lock.json`; other developers need to install the hook
 in their own checkout.
+
+## Tests
+
+Run all tests from the repository root:
+
+```sh
+uv run --project dev pytest
+```
+
+Pytest discovers the suite under `tests/`. Run a subset with
+`uv run --project dev pytest tests/dev` or
+`uv run --project dev pytest tests/car/system`.
+See [test instructions](../tests/README.md) for requirements.

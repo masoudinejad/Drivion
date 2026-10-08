@@ -1,5 +1,5 @@
 {
-  "name": "drivion-dev-tools",
+  "name": "drivion-dev",
   "private": true,
   "devDependencies": {
     "markdownlint-cli2": "0.23.3"

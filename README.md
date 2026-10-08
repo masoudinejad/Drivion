@@ -14,7 +14,10 @@ car/
     arduino/firmware/    Arduino Nano C/C++ firmware
     arduino/scripts/     Build and flash tools run on the Pi
 model_development/       Training and evaluation; independent uv project
-dev_tools/              Development utilities; independent uv project
+dev/                     Development utilities; independent uv project
+  sync/                  Raspberry Pi code sync and SSH setup
+  quality/               Whole-project formatting and lint checks
+tests/                   Automated tests, organized by project component
 hardware/mechanical/     CAD and fabrication
 hardware/electrical/     Schematics and wiring
 docs/                    Architecture and project notes
@@ -47,4 +50,4 @@ install or update dependencies. The entry point is currently a placeholder.
 Each Python use case has its own dependencies and lockfile. Virtual environments
 are created locally and ignored by Git. Model development and tools can be
 prepared with `uv sync --project model_development` and `uv sync --project
-dev_tools` from the repository root.
+dev` from the repository root.
