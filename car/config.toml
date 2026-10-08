@@ -1,0 +1,20 @@
+# Central settings shared by the driving application and system tools.
+# Values will be defined when hardware and application requirements are known.
+
+[system]
+
+[arduino.communication]
+
+[arduino.flashing]
+
+[camera]
+
+[joystick]
+
+[drive]
+
+[inference]
+
+[recording]
+
+[logging]
