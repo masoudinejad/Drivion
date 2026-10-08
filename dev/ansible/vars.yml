@@ -1,18 +1,3 @@
-system_packages:
-  - python3-picamera2
-  - python3-venv
-  - python3-apt
-  - rpicam-apps-lite
-  - rsync
-  - curl
-  - wget
-  - ca-certificates
-  - git
-  - python3-dev
-  - build-essential
-  - linux-libc-dev
-  - libgomp1
-
 uv_version: "0.12.20"
 uv_archive_name: uv-aarch64-unknown-linux-gnu
 uv_archive_sha256: 8a7aad7bc76a2fae5151566ff3e43eacce0b2a113d5e4de3e4afe3e58fa2441e

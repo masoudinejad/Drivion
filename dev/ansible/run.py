@@ -17,6 +17,7 @@ if not __package__:
     sys.path.insert(0, str(ROOT))
 
 from car.system.environment import environment_path
+from car.system.provisioning import system_settings
 from dev.sync import sync_car
 
 
@@ -25,6 +26,7 @@ def build_inventory(settings):
     command = sync_car.build_command(settings)
     ssh = shlex.split(command[command.index("--rsync-path") - 1])
     relative_environment = environment_path(ROOT / "car").relative_to(ROOT / "car")
+    packages, _ = system_settings(ROOT / "car")
     car_root = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
     return {
         "all": {
@@ -38,6 +40,7 @@ def build_inventory(settings):
                             "ansible_python_interpreter": "/usr/bin/python3",
                             "ansible_ssh_common_args": shlex.join(ssh[1:]),
                             "car_root": car_root,
+                            "system_packages": packages,
                             "car_environment_name": relative_environment.name,
                             "car_environment_path": f"{car_root}/{relative_environment}",
                             "controller_root": str(ROOT),

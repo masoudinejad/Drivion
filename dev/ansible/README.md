@@ -21,10 +21,11 @@ It preserves existing configuration files using the apt module defaults.
 It does not perform a distribution upgrade, autoremove packages, or reboot.
 Package upgrades may restart affected services.
 
-After the upgrade, it ensures Picamera2, Python venv/apt support, headless camera
-diagnostics, rsync, curl, wget, CA certificates, and Git are installed. Optional
-desktop recommendations are disabled. Picamera2's required dependencies are
-installed automatically, and its import is verified using system Python.
+System packages are declared in `car/config.toml` under `system.packages`.
+The runner reads and validates this list before creating the Ansible inventory.
+Optional desktop recommendations are disabled; apt installs required dependencies.
+System camera imports are declared under `system.system_imports` and verified
+inside the configured environment with access to system packages.
 
 It installs uv and uvx into `/usr/local/bin`, using the pinned official ARM64
 archive and SHA-256 checksum in `vars.yml`. The archive is kept under
@@ -35,7 +36,17 @@ It then syncs the car folder and creates the configured environment, currently
 headers, a compiler, and libgomp are installed for evdev and numerical packages.
 The frozen `car/system/uv.lock` supplies the Python dependencies. Downloads and
 builds are limited to reduce memory usage on the Pi. All requested runtime
-imports, Picamera2, and the executable `drive.py` launcher are verified.
+imports, system camera imports, and the executable `drive.py` launcher are verified.
+`uv pip check` verifies dependency consistency.
+
+`car/system/verify_environment.py` reads the dependency list directly from
+`car/system/pyproject.toml`. It checks installed versions and imports each package
+in a separate process. Import names default to distribution names with hyphens
+replaced by underscores. Only exceptions belong in
+`tool.drivion.verification.imports` in that same TOML file, for example
+`opencv-python-headless = "cv2"`. Stale mappings fail validation. Dependencies
+with inactive Python/platform markers are skipped. Ansible contains no repeated
+Python package or import list.
 
 Change the environment name and matching relative path in `car/config.toml`.
 Sync excludes `system/env/`, preserving the installed environment on the Pi.

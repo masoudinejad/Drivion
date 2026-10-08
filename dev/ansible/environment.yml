@@ -90,36 +90,18 @@
           - "{{ car_environment_path }}/bin/python"
       changed_when: false
 
-    - name: Verify each runtime import independently
+    - name: Verify configured system imports and project dependencies
       ansible.builtin.command:
         argv:
           - "{{ car_environment_path }}/bin/python"
-          - -c
-          - "import importlib; importlib.import_module('{{ item }}'); print('{{ item }} OK')"
+          - "{{ car_root }}/system/verify_environment.py"
+          - "{{ car_root }}"
       environment:
         OMP_NUM_THREADS: "1"
         OPENBLAS_NUM_THREADS: "1"
         TF_NUM_INTEROP_THREADS: "1"
         TF_NUM_INTRAOP_THREADS: "1"
       changed_when: false
-      loop:
-        - picamera2
-        - libcamera
-        - pandas
-        - cv2
-        - sklearn
-        - tensorflow
-        - onnxruntime
-        - xgboost
-        - lightgbm
-        - art
-        - serial
-        - evdev
-        - tzlocal
-        - dotenv
-        - ai_edge_litert.interpreter
-        - torch
-        - torchvision
 
     - name: Verify the executable car entry point from outside the car directory
       ansible.builtin.command:

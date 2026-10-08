@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import tomllib
+
 from dev.ansible import run
 
 
@@ -63,3 +65,17 @@ def test_missing_sudo_password_prevents_execution():
     ):
         assert run.main([]) == 1
         execute.assert_not_called()
+
+
+def test_inventory_reads_system_packages_from_car_config():
+    configured = tomllib.loads((run.ROOT / "car/config.toml").read_text())["system"][
+        "packages"
+    ]
+    inventory = run.build_inventory({"PI_HOST": "pi.local", "PI_USER": "driver"})
+    host = inventory["all"]["children"]["raspberry_pi"]["hosts"]["car"]
+    assert host["system_packages"] == configured
+    with patch.object(run, "system_settings", return_value=(["custom-package"], [])):
+        inventory = run.build_inventory({"PI_HOST": "pi.local", "PI_USER": "driver"})
+    assert inventory["all"]["children"]["raspberry_pi"]["hosts"]["car"][
+        "system_packages"
+    ] == ["custom-package"]

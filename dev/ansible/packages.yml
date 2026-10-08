@@ -6,12 +6,3 @@
     lock_timeout: 120
     auto_install_module_deps: false
 
-- name: Verify Picamera2 imports using system Python as the car user
-  become: false
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/python3
-      - -c
-      - "from picamera2 import Picamera2; print('Picamera2 import OK')"
-  changed_when: false
-  when: not ansible_check_mode

@@ -3,6 +3,8 @@ name = "drivion"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    # Used by runtime verification to parse dependency requirements.
+    "packaging",
     "pandas",
     "opencv-python-headless",
     "scikit-learn",
@@ -37,3 +39,11 @@ torchvision = { index = "pytorch-cpu" }
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[tool.drivion.verification.imports]
+opencv-python-headless = "cv2"
+scikit-learn = "sklearn"
+xgboost-cpu = "xgboost"
+pyserial = "serial"
+python-dotenv = "dotenv"
+ai-edge-litert = "ai_edge_litert.interpreter"
