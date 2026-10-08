@@ -3,6 +3,10 @@
 
 [system]
 
+[system.python_environment]
+name = "drivion"
+path = "system/env/drivion"
+
 [arduino.communication]
 
 [arduino.flashing]

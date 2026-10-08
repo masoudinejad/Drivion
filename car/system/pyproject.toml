@@ -1,8 +1,39 @@
 [project]
-name = "drivion-car"
+name = "drivion"
 version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = []
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pandas",
+    "opencv-python-headless",
+    "scikit-learn",
+    "tensorflow",
+    "onnxruntime",
+    "xgboost-cpu",
+    "lightgbm",
+    "art",
+    "pyserial",
+    "evdev",
+    "tzlocal",
+    "python-dotenv",
+    "ai-edge-litert==2.3.0",
+    "torch",
+    "torchvision",
+    # Match Raspberry Pi OS NumPy to preserve Picamera2 extension compatibility.
+    "numpy==2.2.4",
+]
 
 [tool.uv]
 package = false
+environments = ["sys_platform == 'linux' and platform_machine == 'aarch64'"]
+required-environments = ["sys_platform == 'linux' and platform_machine == 'aarch64'"]
+
+[tool.uv.sources]
+# Repair upstream dependency metadata; retain the verified upstream binaries.
+ai-edge-litert = { path = "vendor/ai_edge_litert" }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

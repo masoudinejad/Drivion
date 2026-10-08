@@ -29,6 +29,7 @@ EXCLUDES = (
     ".ruff_cache/",
     ".ssh/",
     "/system/version.toml",
+    "/system/env/",
 )
 
 

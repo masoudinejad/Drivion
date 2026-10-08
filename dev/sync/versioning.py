@@ -18,6 +18,11 @@ def snapshot_car(source, destination, excludes):
             name
             for name in names
             if (relative / name).as_posix() == VERSION_PATH
+            or any(
+                (relative / name).as_posix() == pattern.strip("/")
+                for pattern in excludes
+                if pattern.startswith("/")
+            )
             or any(fnmatch.fnmatch(name, pattern.rstrip("/")) for pattern in excludes)
         ]
 

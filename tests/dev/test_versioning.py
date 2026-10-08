@@ -11,6 +11,8 @@ from dev.sync import sync_car, versioning
 def test_snapshot_excludes_generated_files_and_freezes_content(tmp_path):
     source = tmp_path / "source"
     (source / "system/.venv").mkdir(parents=True)
+    (source / "system/env/drivion").mkdir(parents=True)
+    (source / "system/env/drivion/package.py").write_text("environment")
     (source / "system/version.toml").write_text("old deployment")
     (source / "system/.venv/package.py").write_text("environment")
     (source / ".env").write_text("secret")
@@ -22,6 +24,7 @@ def test_snapshot_excludes_generated_files_and_freezes_content(tmp_path):
     assert (snapshot / "drive.py").read_text() == "original"
     assert not (snapshot / "system/version.toml").exists()
     assert not (snapshot / "system/.venv").exists()
+    assert not (snapshot / "system/env").exists()
     assert not (snapshot / ".env").exists()
     assert versioning.snapshot_checksum(snapshot) == checksum
     (snapshot / "drive.py").chmod(0o755)
