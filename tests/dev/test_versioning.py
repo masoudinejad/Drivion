@@ -61,6 +61,7 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path):
         source / "system/configuration.py", tmp_path / "system/configuration.py"
     )
     shutil.copytree(source / "system/information", tmp_path / "system/information")
+    shutil.copytree(source / "system/arduino", tmp_path / "system/arduino")
     device_tree = tmp_path / "device-tree"
     device_tree.mkdir()
     (device_tree / "model").write_bytes(b"Raspberry Pi Test\0")
