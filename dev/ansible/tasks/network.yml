@@ -79,6 +79,7 @@
     - /usr/local/lib/drivion/system
     - /usr/local/lib/drivion/system/information
     - /usr/local/lib/drivion/system/network
+    - /usr/local/lib/drivion/system/arduino
 
 - name: Install the protected Drivion service modules
   ansible.builtin.copy:
@@ -96,6 +97,10 @@
       destination: information/__init__.py
     - source: information/update.py
       destination: information/update.py
+    - source: arduino/__init__.py
+      destination: arduino/__init__.py
+    - source: arduino/discover.py
+      destination: arduino/discover.py
     - source: network/__init__.py
       destination: network/__init__.py
     - source: network/fallback.py
