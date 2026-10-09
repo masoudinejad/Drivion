@@ -61,6 +61,22 @@ class ProgressTests(unittest.TestCase):
         self.assertTrue(stream.getvalue().endswith("\r\033[2K"))
         self.assertNotIn("\033[36m", stream.getvalue())
 
+    def test_long_message_fits_narrow_terminal(self):
+        stream = io.StringIO()
+        stream.isatty = lambda: True
+        with (
+            patch.dict(os.environ, {"TERM": "xterm", "NO_COLOR": "1"}),
+            patch(
+                "car.system.ui.progress.shutil.get_terminal_size",
+                return_value=os.terminal_size((16, 24)),
+            ),
+            show_progress("A very long progress message", stream=stream),
+        ):
+            pass
+        self.assertIn("A very lon…", stream.getvalue())
+        self.assertNotIn("A very long progress message", stream.getvalue())
+        self.assertNotIn("\n", stream.getvalue())
+
     def test_background_result_and_failure(self):
         stream = io.StringIO()
         caller = threading.get_ident()

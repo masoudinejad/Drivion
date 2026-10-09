@@ -181,7 +181,8 @@ ownership; callers should use the context manager rather than setting it.
 Menus redraw complete frames in one write, erasing each row and trailing content
 rather than clearing the full screen on every keypress. The selected label is
 bold and cyan; inactive circle markers are gray. Keyboard hints split into
-separate lines on narrow terminals.
+separate lines on narrow terminals, and long progress messages are abbreviated
+to keep the spinner on one line.
 
 Pass one `--description TEXT` per option before `--` to show aligned, dim
 explanations. Descriptions are hidden when the full row would not fit. Python

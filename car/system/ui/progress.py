@@ -1,6 +1,7 @@
 """Reusable terminal feedback while a foreground or background task runs."""
 
 import os
+import shutil
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -31,7 +32,11 @@ def show_progress(message, *, stream=None):
 
     def animate():
         for frame in cycle("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"):
-            stream.write(f"\r\033[2K  {cyan}{frame}{reset} {dim}{message}{reset}")
+            width = max(1, shutil.get_terminal_size().columns - 5)
+            display = message
+            if len(display) > width:
+                display = display[: max(0, width - 1)] + "…"
+            stream.write(f"\r\033[2K  {cyan}{frame}{reset} {dim}{display}{reset}")
             stream.flush()
             if stopped.wait(0.1):
                 break
