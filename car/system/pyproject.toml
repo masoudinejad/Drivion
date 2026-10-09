@@ -24,6 +24,7 @@ dependencies = [
     "torchvision",
     # Match Raspberry Pi OS NumPy to preserve Picamera2 extension compatibility.
     "numpy==2.2.4",
+    "tomlkit>=0.13,<1",
 ]
 
 [tool.uv]

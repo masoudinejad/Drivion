@@ -131,3 +131,73 @@ def test_inventory_reads_uv_settings_from_central_config():
     assert host["uv_archive_sha256"] == config.archive_sha256
     assert host["uv_install_directory"] == config.install_directory
     assert host["uv_executable_directory"] == config.executable_directory
+
+
+def test_arduino_only_selects_tasks_without_hotspot_requirement():
+    settings = {"PI_HOST": "pi.local", "PI_USER": "driver", "PI_PASSWORD": "short"}
+
+    def execute(command, **kwargs):
+        assert command[command.index("--tags") + 1] == "arduino"
+        assert kwargs["env"]["DRIVION_HOTSPOT_PASSWORD"] == ""
+        assert kwargs["env"]["ANSIBLE_BECOME_PASS"] == "short"
+        return subprocess.CompletedProcess(command, 0)
+
+    with (
+        patch.object(run.sync_car, "read_settings", return_value=settings),
+        patch.object(run.shutil, "which", return_value="/bin/ansible-playbook"),
+        patch.object(run.subprocess, "run", side_effect=execute),
+    ):
+        assert run.main(["--arduino-only"]) == 0
+
+
+def test_arduino_core_conditions_with_cli_1_5_json(tmp_path):
+    """Evaluate the real Ansible expressions against installed and absent cores."""
+    import os
+
+    import yaml
+
+    tasks = yaml.safe_load((run.ROOT / "dev/ansible/tasks/arduino.yml").read_text())
+    record = next(task for task in tasks if "ansible.builtin.set_fact" in task)
+    condition = record["ansible.builtin.set_fact"]["arduino_avr_core_is_installed"]
+    verify = next(task for task in tasks if "ansible.builtin.assert" in task)
+    assertion = verify["ansible.builtin.assert"]["that"][0]
+    checks = []
+    for platforms, expected in (
+        ([], False),
+        ([{"id": "arduino:avr", "installed_version": "1.8.6"}], True),
+        ([{"id": "arduino:avr", "installed_version": "1.8.5"}], False),
+        ([{"id": "arduino:avr"}], False),
+        ([{"id": "other:avr", "installed_version": "1.8.6"}], False),
+    ):
+        result = {"rc": 0, "stdout": json.dumps({"platforms": platforms})}
+        checks.append(
+            {
+                "ansible.builtin.assert": {
+                    "that": [
+                        f"({condition.removeprefix('{{').removesuffix('}}').strip()}) == expected",
+                        f"({assertion}) == expected",
+                    ]
+                },
+                "vars": {
+                    "installed_arduino_cores": result,
+                    "verified_arduino_cores": result,
+                    "arduino_avr_core": "arduino:avr",
+                    "arduino_avr_core_version": "1.8.6",
+                    "expected": expected,
+                },
+            }
+        )
+    play = tmp_path / "verify.json"
+    play.write_text(
+        json.dumps([{"hosts": "localhost", "gather_facts": False, "tasks": checks}])
+    )
+    environment = os.environ.copy()
+    environment["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible")
+    result = subprocess.run(
+        ["ansible-playbook", "-i", "localhost,", "-c", "local", str(play)],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -68,6 +68,18 @@ checksum configured under `system.provisioning.uv` in `car/config.toml`.
 Installation does not change shell profiles or download a separate Python
 interpreter. The Pi must use a 64-bit ARM OS.
 
+Arduino provisioning runs automatically during every normal setup run. To
+install or repair only Arduino tooling without running the package upgrades,
+network setup, or Python environment tasks, use:
+
+```sh
+uv run --project dev python dev/ansible/run.py --arduino-only
+```
+
+This uses the same TOML settings and idempotent tasks as full provisioning,
+including CLI version, sketchbook, and AVR core verification. A sync alone
+copies code and does not install system tools. Check mode previews installation.
+
 It also installs the configured Arduino CLI ARM64 release, grants the car user
 the configured serial-device group, and installs the configured AVR core. Each
 sketch should be placed in its own folder under the configured sketchbook. A new

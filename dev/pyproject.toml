@@ -11,6 +11,7 @@ dependencies = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "ruff>=0.16.10",
+    "tomlkit>=0.13,<1",
 ]
 
 [tool.uv]

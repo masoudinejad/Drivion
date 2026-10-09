@@ -1,10 +1,12 @@
 """Validate TOML settings and programmatic camera overrides without hardware."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from car.src.camera.config import CameraConfig
-from car.src.config import AppConfig, load_config
+from car.src.config import AppConfig, load_config, update_config
 
 
 def test_repository_config_loads():
@@ -19,6 +21,65 @@ def test_repository_config_loads():
     assert config.system.provisioning.uv.executable_directory == "/usr/local/bin"
     assert config.arduino.provisioning is not None
     assert len(config.arduino.provisioning.cli_archive_sha256) == 64
+
+
+def test_update_config_preserves_comments_and_permissions(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('# Settings\n[camera]\nframe_rate = 41.0 # FPS\nchannels = "rgb"\n')
+    path.chmod(0o640)
+    config = update_config("camera.frame_rate", 30.0, path)
+    assert config.camera.frame_rate == 30.0
+    assert load_config(path) == config
+    assert path.read_text() == (
+        '# Settings\n[camera]\nframe_rate = 30.0 # FPS\nchannels = "rgb"\n'
+    )
+    assert path.stat().st_mode & 0o777 == 0o640
+
+
+@pytest.mark.parametrize(
+    "parameter,value,error",
+    [
+        ("camera.frame_rate", -1.0, ValidationError),
+        ("camera.frame_rate", "30", ValidationError),
+        ("camera.framerate", 30.0, KeyError),
+        ("camera", {}, KeyError),
+        ("camera.frame_rate.value", 30.0, KeyError),
+        ("", 30.0, KeyError),
+    ],
+)
+def test_update_config_rejects_changes_without_writing(
+    tmp_path, parameter, value, error
+):
+    path = tmp_path / "config.toml"
+    original = b"[camera]\nframe_rate = 41.0\n"
+    path.write_bytes(original)
+    with pytest.raises(error):
+        update_config(parameter, value, path)
+    assert path.read_bytes() == original
+
+
+def test_update_config_validates_related_settings(tmp_path):
+    path = tmp_path / "config.toml"
+    original = (Path(__file__).parents[3] / "car/config.toml").read_bytes()
+    path.write_bytes(original)
+    with pytest.raises(ValidationError):
+        update_config("system.network.fallback_timer_accuracy_seconds", 61, path)
+    assert path.read_bytes() == original
+
+
+def test_update_config_failed_replace_leaves_original(tmp_path, monkeypatch):
+    path = tmp_path / "config.toml"
+    original = b"[camera]\nframe_rate = 41.0\n"
+    path.write_bytes(original)
+
+    def fail_replace(*args):
+        raise OSError("Replacement failed")
+
+    monkeypatch.setattr("car.src.config.os.replace", fail_replace)
+    with pytest.raises(OSError, match="Replacement failed"):
+        update_config("camera.frame_rate", 30.0, path)
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_override_preserves_other_fields_and_original():

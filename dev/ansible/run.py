@@ -117,6 +117,11 @@ def main(argv=None):
         action="store_true",
         help="Validate the playbook without connecting",
     )
+    parser.add_argument(
+        "--arduino-only",
+        action="store_true",
+        help="Install and verify Arduino CLI, serial access, and the AVR core only",
+    )
     args = parser.parse_args(argv)
     try:
         settings = sync_car.read_settings(ROOT / "dev/sync/.env")
@@ -124,7 +129,7 @@ def main(argv=None):
         if not args.syntax_check and not settings.get("PI_PASSWORD"):
             raise ValueError("Set PI_PASSWORD in dev/sync/.env for sudo")
         configured_hotspot_password = (
-            "" if args.syntax_check else hotspot_password(settings)
+            "" if args.syntax_check or args.arduino_only else hotspot_password(settings)
         )
         if shutil.which("ansible-playbook") is None:
             raise ValueError(
@@ -147,6 +152,8 @@ def main(argv=None):
                 str(path),
                 str(Path(__file__).with_name("update.yml")),
             ]
+            if args.arduino_only:
+                command.extend(["--tags", "arduino"])
             if args.check:
                 command.append("--check")
             if args.syntax_check:

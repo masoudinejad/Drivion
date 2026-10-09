@@ -38,6 +38,25 @@ Overrides replace fields; nested dictionaries replace whole sections. Call the
 section's `with_overrides` first to retain its other settings. Avoid Pydantic's
 `model_copy(update=...)`, which bypasses update validation.
 
+System management running in the car environment can persist a setting with
+`update_config`:
+
+```python
+from car.src.config import update_config
+
+config = update_config("camera.frame_rate", 30.0)
+```
+
+Use the complete dotted parameter name and a typed Python value. An optional
+`path` selects another TOML file. The setting must already exist in that file;
+unknown names raise `KeyError`, and invalid values raise Pydantic
+`ValidationError` before writing. The entire configuration is validated, including
+relationships between settings. Updates preserve comments, unrelated settings,
+and file permissions, and replace the file atomically. The function returns the
+updated `AppConfig`; existing components must reload or receive the new settings.
+Callers must serialize concurrent updates. This helper requires the application
+dependencies and is not available during initial provisioning.
+
 ### Camera settings
 
 - `width` and `height`: positive even output dimensions (compatible with YUV420).

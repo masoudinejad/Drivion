@@ -128,7 +128,8 @@
         (
           (installed_arduino_cores.stdout | from_json).platforms
           | selectattr('id', 'equalto', arduino_avr_core)
-          | selectattr('installed', 'equalto', arduino_avr_core_version)
+          | selectattr('installed_version', 'defined')
+          | selectattr('installed_version', 'equalto', arduino_avr_core_version)
           | list
           | length
         ) == 1
@@ -200,7 +201,8 @@
         (
           (verified_arduino_cores.stdout | from_json).platforms
           | selectattr('id', 'equalto', arduino_avr_core)
-          | selectattr('installed', 'equalto', arduino_avr_core_version)
+          | selectattr('installed_version', 'defined')
+          | selectattr('installed_version', 'equalto', arduino_avr_core_version)
           | list
           | length
         ) == 1

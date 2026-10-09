@@ -25,6 +25,7 @@
 
     - name: Install and configure Arduino CLI
       ansible.builtin.import_tasks: tasks/arduino.yml
+      tags: arduino
 
     - name: Configure Wi-Fi fallback access
       ansible.builtin.import_tasks: tasks/network.yml
