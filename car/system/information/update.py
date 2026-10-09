@@ -12,6 +12,7 @@ from pathlib import Path
 
 import tomllib
 
+from ..arduino.discover import compact_report, discover
 from ..configuration import network_settings
 
 INFO_PATH = Path("system/info.toml")
@@ -48,6 +49,17 @@ def hardware_info(device_tree=Path("/proc/device-tree")):
 
 
 def _toml_value(value):
+    if isinstance(value, dict):
+        return (
+            "{ "
+            + ", ".join(
+                f"{json.dumps(key)} = {_toml_value(item)}"
+                for key, item in value.items()
+            )
+            + " }"
+        )
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
     if isinstance(value, bool):
         return str(value).lower()
     if isinstance(value, (str, int, float)):
@@ -56,10 +68,36 @@ def _toml_value(value):
 
 
 def render_info(sections):
+    """Render nested records as tables and arrays of tables for readability."""
     lines = ["# Generated system information; do not edit."]
+
+    def key_name(key):
+        return (
+            key
+            if key.isascii() and key.replace("_", "").replace("-", "").isalnum()
+            else json.dumps(key)
+        )
+
+    def table(path, values, array=False):
+        name = ".".join(key_name(key) for key in path)
+        lines.extend(("", f"[[{name}]]" if array else f"[{name}]"))
+        children = []
+        for key, value in values.items():
+            if isinstance(value, dict):
+                children.append((path + (key,), value, False))
+            elif (
+                isinstance(value, list)
+                and value
+                and all(isinstance(item, dict) for item in value)
+            ):
+                children.extend((path + (key,), item, True) for item in value)
+            else:
+                lines.append(f"{key_name(key)} = {_toml_value(value)}")
+        for child_path, child_values, child_array in children:
+            table(child_path, child_values, child_array)
+
     for section, values in sections.items():
-        lines.extend(("", f"[{section}]"))
-        lines.extend(f"{key} = {_toml_value(value)}" for key, value in values.items())
+        table((section,), values)
     return "\n".join(lines) + "\n"
 
 
@@ -89,6 +127,7 @@ def collect_info(car_root, software=None, device_tree=Path("/proc/device-tree"))
             existing_software(car_root / INFO_PATH) if software is None else software
         ),
         "hardware": hardware,
+        "arduino": compact_report(discover(car_root)),
         "system": {
             "hostname": socket.gethostname(),
             "operating_system": _os_name(),
