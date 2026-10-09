@@ -95,9 +95,9 @@ drivion_menu() (
             fi
         done
         if (( selected == count )); then
-            printf '\n  %s▸ Back%s\n' "$amber" "$reset" >&3
+            printf '\n  %s▸ Back%s\n' "$cyan" "$reset" >&3
         else
-            printf '\n    %sBack%s\n' "$amber" "$reset" >&3
+            printf '\n    Back\n' >&3
         fi
         printf '\n  %s[↑/↓] Move    [Enter] Select%s\n' "$dim" "$reset" >&3
 

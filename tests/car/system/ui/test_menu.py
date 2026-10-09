@@ -30,6 +30,7 @@ class MenuTests(unittest.TestCase):
         if pid == 0:
             fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
             os.environ["TERM"] = "xterm-256color"
+            os.environ.pop("NO_COLOR", None)
             os.environ["MENU"] = str(MENU)
             if managed:
                 os.environ["DRIVION_UI_SCREEN_ACTIVE"] = "1"
@@ -84,11 +85,13 @@ class MenuTests(unittest.TestCase):
     def test_back_with_wrap(self):
         self.assertIn(b"RESULT=0 STATUS=0", self.run_menu(b"\x1b[A\r"))
 
-    def test_shared_screen(self):
+    def test_shared_screen_and_back_style(self):
         output = self.run_menu(b"\x1b[A\r", managed=True)
         self.assertIn(b"RESULT=0 STATUS=0", output)
         self.assertNotIn(b"\x1b[?1049h", output)
         self.assertNotIn(b"\x1b[?1049l", output)
+        self.assertNotIn(b"\x1b[33m", output)
+        self.assertIn("\x1b[36m▸ Back".encode(), output)
 
     def test_escape(self):
         self.assertIn(b"RESULT=0 STATUS=0", self.run_menu(b"\x1b"))
