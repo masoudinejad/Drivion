@@ -22,6 +22,10 @@ release_url = "https://github.com/astral-sh/uv/releases/download/0.12.20"
 install_directory = "/opt/drivion/uv/0.12.20"
 executable_directory = "/usr/local/bin"
 
+[arduino.discovery]
+discovery_timeout_seconds = 3
+command_timeout_seconds = 30
+
 [arduino.provisioning]
 cli_version = "1.5.1"
 cli_archive_name = "arduino-cli_1.5.1_Linux_ARM64"
