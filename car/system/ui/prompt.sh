@@ -5,7 +5,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/theme.sh"
 
 drivion_prompt() (
     local question="" type=text answer="" key sequence error="" valid normalized
-    local saved_state rows columns width display
+    local saved_state rows columns width display remaining line question_width
     local cyan amber red green gray bold dim reset
     drivion_load_theme || return 2
 
@@ -59,7 +59,22 @@ drivion_prompt() (
         width=$(( columns - 6 ))
         display=$answer
         if (( ${#display} > width )); then display=${display: -width}; fi
-        printf '\033[?25l\033[H\033[2J\n  %s%s%s\n\n' "$bold" "${question:0:columns-4}" "$reset" >&3
+        printf '\033[?25l\033[H\033[2J\n' >&3
+        # Wrap the complete question; confirmations append essential answer hints.
+        question_width=$(( columns - 4 ))
+        remaining=$question
+        while [[ -n $remaining ]]; do
+            line=${remaining:0:question_width}
+            if (( ${#remaining} > question_width )) && [[ $line == *" "* ]]; then
+                # Prefer a word boundary, splitting long unbroken words as needed.
+                line=${line% *}
+                [[ -n $line ]] || line=${remaining:0:question_width}
+            fi
+            printf '  %s%s%s\n' "$bold" "$line" "$reset" >&3
+            remaining=${remaining:${#line}}
+            while [[ $remaining == " "* ]]; do remaining=${remaining:1}; done
+        done
+        printf '\n' >&3
         printf '  %sType: %s%s\n\n' "$dim" "$type" "$reset" >&3
         printf '  %sIgnore%s\n\n' "$amber" "$reset" >&3
         if [[ -n $error ]]; then printf '  %s%s%s\n\n' "$red" "$error" "$reset" >&3; fi

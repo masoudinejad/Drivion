@@ -95,8 +95,9 @@ and the previous screen are restored on exit. `NO_COLOR=1` disables styling.
 `confirm.sh` provides `drivion_confirm --question "Continue?"` when sourced,
 or can be run with Bash. It reuses the prompt's cyan input, amber Ignore,
 and dim keyboard hints. Type yes/no or y/n in any letter case and press Enter.
-Invalid or empty input asks again. Yes returns status 0, No or Escape/Ignore
-returns 1, Ctrl-C returns
+Long questions wrap to the terminal width so the complete question and answer
+hints remain visible. Invalid or empty input asks again. Yes returns status 0;
+No or Escape/Ignore returns 1; Ctrl-C returns
 130, and terminal or argument errors return 2. No answer is written to stdout.
 
 ```bash

@@ -5,6 +5,7 @@ import os
 import pty
 import re
 import select
+import shlex
 import signal
 import struct
 import termios
@@ -16,21 +17,33 @@ PROMPT = Path(__file__).resolve().parents[4] / "car/system/ui/prompt.sh"
 
 
 class PromptTests(unittest.TestCase):
-    def run_prompt(self, keys, kind="text", sourced=False):
+    def run_prompt(
+        self,
+        keys,
+        kind="text",
+        sourced=False,
+        question="Test",
+        columns=80,
+        confirm=False,
+    ):
         invocation = "drivion_prompt" if sourced else 'bash "$PROMPT"'
         setup = 'source "$PROMPT"; set -euo pipefail;' if sourced else ""
+        question = shlex.quote(question)
+        if confirm:
+            invocation = 'bash "$CONFIRM"'
         script = (
             f'{setup} trap ":" INT; before=$(stty -g); '
-            f"if result=$({invocation} --question Test --type {kind}); then status=0; "
+            f"if result=$({invocation} --question {question} {'' if confirm else '--type ' + kind}); then status=0; "
             'else status=$?; fi; after=$(stty -g); printf "BEFORE=%s AFTER=%s\\n" "$before" "$after"; '
             'printf "RESULT=%s STATUS=%s RESTORED=%s\\n" "$result" "$status" '
             '"$([ "$before" = "$after" ] && echo yes || echo no)"'
         )
         pid, terminal = pty.fork()
         if pid == 0:
-            fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+            fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, columns, 0, 0))
             os.environ["TERM"] = "xterm-256color"
             os.environ["PROMPT"] = str(PROMPT)
+            os.environ["CONFIRM"] = str(PROMPT.with_name("confirm.sh"))
             os.execv("/bin/bash", ["bash", "-c", script])
         output = b""
         sent = False
@@ -73,6 +86,31 @@ class PromptTests(unittest.TestCase):
 
         self.assertEqual(normalize(before), normalize(after))
         return output
+
+    def test_long_confirmation_displays_complete_question(self):
+        question = (
+            "Check running firmware on /dev/ttyUSB0? Opening serial may reset the board. "
+            "Confirm driving is stopped, motors are safe and other serial users are closed"
+        )
+        for columns in (40, 80, 120):
+            with self.subTest(columns=columns):
+                output = self.run_prompt(
+                    b"yes\r", question=question, columns=columns, confirm=True
+                )
+                plain = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", output).decode()
+                heading = plain.split("Type:", 1)[0]
+                self.assertIn(question + " (yes/no or y/n)", " ".join(heading.split()))
+                self.assertTrue(
+                    all(len(line) <= columns for line in heading.splitlines())
+                )
+                self.assertIn(b"STATUS=0", output)
+
+    def test_unbroken_question_wraps_without_losing_characters(self):
+        question = "x" * 100
+        output = self.run_prompt(b"hello\r", question=question, columns=40)
+        plain = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", output).decode()
+        heading = plain.split("Type:", 1)[0]
+        self.assertEqual("".join(heading.split()), question)
 
     def test_text_and_editing(self):
         self.assertIn(b"RESULT=hello STATUS=0", self.run_prompt(b"hellx\x7fo\r"))
