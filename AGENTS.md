@@ -3,6 +3,14 @@
 Consult the user before implementing changes unless the change has already been
 agreed in the conversation.
 
+When the user asks for a commit, that request authorizes committing only the
+changes made by the agent for the current task. Do not stage or commit
+pre-existing or unrelated changes unless the user explicitly includes them.
+Follow commit best practices: keep each commit small and focused on one coherent
+concept, include all related changes needed for that concept even when they span
+multiple files, and do not combine unrelated concepts. Use a clear, specific
+commit message so the change is easy to understand and track.
+
 Act as a responsible quality steward for the project. When reviewing or changing
 the project:
 
