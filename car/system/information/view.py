@@ -27,8 +27,17 @@ def render_info(info):
     lines = []
 
     def render_table(table, prefix=""):
+        def table_list(value):
+            return (
+                isinstance(value, list)
+                and value
+                and all(isinstance(item, dict) for item in value)
+            )
+
         fields = {
-            key: value for key, value in table.items() if not isinstance(value, dict)
+            key: value
+            for key, value in table.items()
+            if not isinstance(value, dict) and not table_list(value)
         }
         if fields:
             lines.append(_safe_text(prefix.replace("_", " ").title() or "Information"))
@@ -39,11 +48,19 @@ def render_info(info):
             for key, value in fields.items():
                 if isinstance(value, bool):
                     value = "Yes" if value else "No"
+                elif key == "serialNumber" and not value:
+                    value = "Not provided"
+                elif isinstance(value, list):
+                    value = ", ".join(map(str, value)) if value else "None"
                 lines.append(f"  {labels[key]:<{width}} : {_safe_text(value)}")
             lines.append("")
         for key, value in table.items():
             if isinstance(value, dict):
                 render_table(value, f"{prefix} / {key}" if prefix else key)
+            elif table_list(value):
+                for number, item in enumerate(value, start=1):
+                    name = f"{key} {number}"
+                    render_table(item, f"{prefix} / {name}" if prefix else name)
 
     render_table(info)
     return "\n".join(lines).rstrip() or "No system information is available yet."
