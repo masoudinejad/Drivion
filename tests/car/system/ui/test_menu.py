@@ -16,7 +16,7 @@ MENU = Path(__file__).resolve().parents[4] / "car/system/ui/menu.sh"
 
 
 class MenuTests(unittest.TestCase):
-    def run_menu(self, keys, options='"One" "Two"', sourced=False):
+    def run_menu(self, keys, options='"One" "Two"', sourced=False, managed=False):
         invocation = "drivion_menu" if sourced else 'bash "$MENU"'
         setup = 'source "$MENU"; set -euo pipefail;' if sourced else ""
         script = (
@@ -31,6 +31,10 @@ class MenuTests(unittest.TestCase):
             fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
             os.environ["TERM"] = "xterm-256color"
             os.environ["MENU"] = str(MENU)
+            if managed:
+                os.environ["DRIVION_UI_SCREEN_ACTIVE"] = "1"
+            else:
+                os.environ.pop("DRIVION_UI_SCREEN_ACTIVE", None)
             os.execv("/bin/bash", ["bash", "-c", script])
         output = b""
         sent = False
@@ -79,6 +83,12 @@ class MenuTests(unittest.TestCase):
 
     def test_back_with_wrap(self):
         self.assertIn(b"RESULT=0 STATUS=0", self.run_menu(b"\x1b[A\r"))
+
+    def test_shared_screen(self):
+        output = self.run_menu(b"\x1b[A\r", managed=True)
+        self.assertIn(b"RESULT=0 STATUS=0", output)
+        self.assertNotIn(b"\x1b[?1049h", output)
+        self.assertNotIn(b"\x1b[?1049l", output)
 
     def test_escape(self):
         self.assertIn(b"RESULT=0 STATUS=0", self.run_menu(b"\x1b"))

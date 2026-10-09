@@ -6,6 +6,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/theme.sh"
 drivion_menu() (
     local title="Select an option" option key sequence saved_state=""
     local selected=0 first=0 count rows columns visible index last label
+    local owns_screen=0
     local cyan amber red green gray bold dim reset
     local -a options=()
     drivion_load_theme || return 2
@@ -56,14 +57,19 @@ drivion_menu() (
         return 2
     fi
     # The subshell keeps traps, terminal descriptors, and variables out of callers.
-    trap 'stty "'"$saved_state"'" <&3; printf "\033[?25h\033[?1049l" >&3; exec 3>&-' EXIT
+    # Only the screen owner switches back to the shell on exit.
+    trap 'stty "'"$saved_state"'" <&3; printf "\033[?25h" >&3; if (( owns_screen )); then printf "\033[?1049l" >&3; fi; exec 3>&-' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
     if ! stty -echo -icanon -isig min 1 time 0 <&3; then
         return 2
     fi
-    printf '\033[?1049h\033[?25l' >&3
+    if [[ ${DRIVION_UI_SCREEN_ACTIVE:-0} != 1 ]]; then
+        owns_screen=1
+        printf '\033[?1049h' >&3
+    fi
+    printf '\033[?25l' >&3
     count=${#options[@]}
 
     while :; do

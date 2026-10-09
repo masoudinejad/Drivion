@@ -25,6 +25,7 @@ class PromptTests(unittest.TestCase):
         question="Test",
         columns=80,
         confirm=False,
+        managed=False,
     ):
         invocation = "drivion_prompt" if sourced else 'bash "$PROMPT"'
         setup = 'source "$PROMPT"; set -euo pipefail;' if sourced else ""
@@ -43,6 +44,10 @@ class PromptTests(unittest.TestCase):
             fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 24, columns, 0, 0))
             os.environ["TERM"] = "xterm-256color"
             os.environ["PROMPT"] = str(PROMPT)
+            if managed:
+                os.environ["DRIVION_UI_SCREEN_ACTIVE"] = "1"
+            else:
+                os.environ.pop("DRIVION_UI_SCREEN_ACTIVE", None)
             os.environ["CONFIRM"] = str(PROMPT.with_name("confirm.sh"))
             os.execv("/bin/bash", ["bash", "-c", script])
         output = b""
@@ -146,6 +151,12 @@ class PromptTests(unittest.TestCase):
         output = self.run_prompt(b"\rhello\r")
         self.assertIn(b"Please enter non-empty text", output)
         self.assertIn(b"RESULT=hello STATUS=0", output)
+
+    def test_shared_screen_cancellation(self):
+        output = self.run_prompt(b"\x03", managed=True)
+        self.assertIn(b"RESULT= STATUS=130", output)
+        self.assertNotIn(b"\x1b[?1049h", output)
+        self.assertNotIn(b"\x1b[?1049l", output)
 
     def test_ignore(self):
         self.assertIn(b"RESULT= STATUS=3", self.run_prompt(b"\x1b"))

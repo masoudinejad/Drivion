@@ -54,7 +54,9 @@ Enter confirms, Escape selects Back, and Ctrl-C cancels with exit status 130.
 Other errors use a nonzero status. Empty option lists display Back alone.
 
 The interface uses the controlling terminal; only the result goes to stdout.
-It restores terminal settings and the previous screen when it exits. Long lists
+It restores terminal settings when it exits. Standalone calls also restore
+the previous screen; management keeps one shared screen until the app exits.
+Back uses the same plain text and cyan selection as other options. Long lists
 scroll while Back stays visible. Set `NO_COLOR=1` to disable styling. The menu
 does not perform the selected action; its caller decides what to do next.
 
@@ -161,3 +163,13 @@ invalid input, and editing keys; Ctrl-C cancels the walkthrough. The two progres
 demonstrations each wait two seconds so the spinner can be inspected.
 Run again with `NO_COLOR=1` to check the unstyled appearance. If the environment
 path in `config.toml` was customized, use that environment's Python instead.
+
+## Management screen lifetime
+
+`manage.py` owns a single alternate terminal screen through `terminal_screen`
+from `screen.py`. Child menus and prompts restore input settings without
+switching back to the shell. Background progress and result pages therefore
+stay inside the management UI. Back from the top menu, cancellation, and errors
+restore the original shell screen and cursor. The internal
+`DRIVION_UI_SCREEN_ACTIVE` environment flag lets child processes share this
+ownership; callers should use the context manager rather than setting it.
