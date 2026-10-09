@@ -8,7 +8,8 @@ environment managed in `../system/`.
 
 `config.py` loads the central `car/config.toml` into the single Pydantic schema
 defined in `configuration/schema.py`. Models reject unknown keys, invalid types,
-and invalid values. Camera and Arduino settings are required so configurable
+and invalid values. Camera, Arduino, and communication settings are required so
+configurable
 values never fall back to copies embedded in Python. Empty future sections use
 empty models and reject settings until their schemas are defined. Bootstrap and
 boot tools use narrow standard-library readers because they must run before the
@@ -50,16 +51,19 @@ config = update_config("camera.frame_rate", 30.0)
 Use the complete dotted parameter name and a typed Python value. An optional
 `path` selects another TOML file. The setting must already exist in that file;
 unknown names raise `KeyError`, and invalid values raise Pydantic
-`ValidationError` before writing. The entire configuration is validated, including
+`ValidationError` before writing. The entire configuration is validated,
+including
 relationships between settings. Updates preserve comments, unrelated settings,
 and file permissions, and replace the file atomically. The function returns the
-updated `AppConfig`; existing components must reload or receive the new settings.
+updated `AppConfig`; existing components must reload or receive the new
+settings.
 Callers must serialize concurrent updates. This helper requires the application
 dependencies and is not available during initial provisioning.
 
 ### Camera settings
 
-- `width` and `height`: positive even output dimensions (compatible with YUV420).
+- `width` and `height`: positive even output dimensions (compatible with
+YUV420).
   Output dimensions are separate from sensor resolution.
 - `channels`: `"rgb"` for an H × W × 3 RGB array, or `"y"` for an H × W
   luminance array. Both use uint8 values.
@@ -82,10 +86,13 @@ fields can be added when a concrete requirement arises.
 
 ## Camera capture
 
-`Camera(config.camera)` configures and starts the default camera without a preview.
-It applies the sensor dimensions directly, leaving bit depth at the system default.
+`Camera(config.camera)` configures and starts the default camera without a
+preview.
+It applies the sensor dimensions directly, leaving bit depth at the system
+default.
 It checks the applied sensor/stream dimensions and the frame-duration limits,
-rejecting unsupported settings instead of silently substituting a different mode.
+rejecting unsupported settings instead of silently substituting a different
+mode.
 It does not enumerate modes or choose a frame rate automatically.
 
 The ISP scales the configured sensor view to fit the output dimensions. Frames
@@ -103,8 +110,10 @@ Use a context manager or `close()` to release the device. Camera operations are
 not thread-safe. Application logging settings are left unchanged.
 
 `save_capture(path)` captures and saves synchronously in the configured format.
-`save_frame(frame, path, config)` saves an existing frame. Missing extensions are
-supplied; conflicting extensions are rejected. Parent folders must already exist.
+`save_frame(frame, path, config)` saves an existing frame. Missing extensions
+are
+supplied; conflicting extensions are rejected. Parent folders must already
+exist.
 JPEG uses quality 95. Continuous recording should manage its own saving queue.
 
 Run the benchmark from the repository root in the car's Python environment:
@@ -120,4 +129,10 @@ Optional saving is synchronous and included in measured throughput. Hardware
 sensor FPS, actual exposure timing and full FOV must be verified on the Pi;
 benchmark loop throughput alone does not establish those properties.
 
-Reference: [Picamera2 manual](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf).
+Reference: [Picamera2
+manual](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf).
+
+## Pi–Arduino communication
+
+See [communication/README.md](communication/README.md) for the reusable Python
+module, Arduino library, central configuration, and versioned wire protocol.

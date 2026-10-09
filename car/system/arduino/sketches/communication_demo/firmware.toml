@@ -1,0 +1,35 @@
+# Requirements owned by this sketch; parameter values live in car/config.toml.
+[firmware]
+version = "1.0.0"
+protocol_version = 1
+fqbn = "arduino:avr:nano:cpu=atmega328"
+
+[parameters.COMMAND_TIMEOUT_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.FRAME_TIMEOUT_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.STATUS_INTERVAL_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.MAX_TELEMETRY_INTERVAL_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.RX_BUDGET_BYTES]
+type = "integer"
+minimum = 1
+maximum = 65535
+
+[parameters.TX_BUDGET_BYTES]
+type = "integer"
+minimum = 1
+maximum = 65535

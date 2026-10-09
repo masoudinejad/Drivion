@@ -40,3 +40,27 @@ frame_rate = 41.0 # Frames per second
 jpeg_quality = 95
 buffer_count = 4
 warmup_seconds = 1.0
+
+
+[communication]
+baud_rate = 115200
+boot_wait_seconds = 2.0
+read_timeout_seconds = 0.01
+write_timeout_seconds = 0.05
+handshake_timeout_seconds = 2.0
+max_handshake_rtt_seconds = 0.1
+frame_timeout_seconds = 0.1
+status_stale_seconds = 0.5
+command_validity_ms = 150
+# Conservative bound for relative Pi/Arduino clock drift; verify on hardware.
+clock_drift_ppm = 10000
+max_session_age_seconds = 10.0
+read_budget_bytes = 256
+
+[firmware.communication_demo]
+COMMAND_TIMEOUT_MS = 200
+FRAME_TIMEOUT_MS = 100
+STATUS_INTERVAL_MS = 100
+MAX_TELEMETRY_INTERVAL_MS = 60000
+RX_BUDGET_BYTES = 32
+TX_BUDGET_BYTES = 32

@@ -50,3 +50,7 @@ FQBN
 to `arduino:avr:nano:cpu=atmega328old` before compiling. For another board, set
 the appropriate FQBN in that firmware definition; USB VID/PID alone cannot select
 it reliably.
+
+The `communication_demo` sketch demonstrates the shared binary communication
+library with target echo reports and no actuator I/O. See
+[the protocol documentation](../../../src/communication/README.md).

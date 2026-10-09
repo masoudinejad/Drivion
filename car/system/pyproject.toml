@@ -88,7 +88,6 @@ command_timeout_seconds = 300
 [tool.drivion.firmware_flash]
 log_directory = "system/arduino/logs"
 command_timeout_seconds = 120
-baud_rate = 115200
 query_command = "INFO"
 boot_wait_seconds = 2.0
 query_timeout_seconds = 5.0

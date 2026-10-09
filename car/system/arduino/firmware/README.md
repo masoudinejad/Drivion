@@ -9,7 +9,10 @@ There are three distinct responsibilities:
 - `car/system/pyproject.toml` owns compile/flash tool settings under
   `tool.drivion.firmware_compile` and `tool.drivion.firmware_flash`.
 
-For the included blink test, the only entry in `car/config.toml` is:
+The shared serial baud comes from `communication.baud_rate` in `car/config.toml`
+and is used for header generation and firmware checks.
+
+For the included blink test, its parameter entry in `car/config.toml` is:
 
 ```toml
 [firmware.board_setup_test]

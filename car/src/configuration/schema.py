@@ -144,6 +144,35 @@ class ArduinoConfig(ConfigModel):
         return value
 
 
+class CommunicationConfig(ConfigModel):
+    """Serial transport budgets; wire constants are versioned protocol definitions."""
+
+    baud_rate: int = Field(ge=1, le=4000000)
+    boot_wait_seconds: float = Field(ge=0, allow_inf_nan=False)
+    read_timeout_seconds: float = Field(gt=0, allow_inf_nan=False)
+    write_timeout_seconds: float = Field(gt=0, allow_inf_nan=False)
+    handshake_timeout_seconds: float = Field(gt=0, allow_inf_nan=False)
+    max_handshake_rtt_seconds: float = Field(gt=0, allow_inf_nan=False)
+    frame_timeout_seconds: float = Field(gt=0, allow_inf_nan=False)
+    status_stale_seconds: float = Field(gt=0, allow_inf_nan=False)
+    command_validity_ms: int = Field(ge=1, le=2147483647)
+    clock_drift_ppm: int = Field(ge=0, le=100000)
+    max_session_age_seconds: float = Field(gt=0, allow_inf_nan=False)
+    read_budget_bytes: int = Field(ge=1, le=65536)
+
+    @model_validator(mode="after")
+    def consistent_timing(self):
+        if self.max_handshake_rtt_seconds >= self.command_validity_ms / 1000:
+            raise ValueError("handshake uncertainty must be below command validity")
+        if self.read_timeout_seconds > self.handshake_timeout_seconds:
+            raise ValueError("read timeout exceeds handshake timeout")
+        if self.max_handshake_rtt_seconds > self.handshake_timeout_seconds:
+            raise ValueError("RTT limit exceeds handshake timeout")
+        if self.frame_timeout_seconds < self.read_timeout_seconds:
+            raise ValueError("frame timeout must accommodate serial read timeout")
+        return self
+
+
 class AppConfig(ConfigModel):
     """All supported sections in car/config.toml."""
 
@@ -151,6 +180,7 @@ class AppConfig(ConfigModel):
     arduino: ArduinoConfig
     firmware: dict[str, dict[str, object]]
     camera: CameraConfig
+    communication: CommunicationConfig
     joystick: EmptyConfig = Field(default_factory=EmptyConfig)
     drive: EmptyConfig = Field(default_factory=EmptyConfig)
     inference: EmptyConfig = Field(default_factory=EmptyConfig)

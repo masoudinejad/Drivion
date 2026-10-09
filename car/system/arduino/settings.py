@@ -76,7 +76,7 @@ def load_context(car_root=None):
     if not isinstance(runtime["firmware"], dict):
         raise TypeError("Firmware defaults must be a TOML table")
     compile_settings = tools["firmware_compile"]
-    flash_settings = tools["firmware_flash"]
+    flash_settings = serial_settings(tools["firmware_flash"], runtime)
     validate_compile_configuration(compile_settings)
     validate_flash_configuration(flash_settings)
     context = FirmwareContext(
@@ -103,11 +103,14 @@ def load_context(car_root=None):
 
 
 def tool_settings(car_root, kind):
-    """Read only the requested tool table for standalone tools and diagnostics."""
+    """Read a tool table, merging the central serial baud for flash/check tools."""
     if kind not in ("compile", "flash"):
         raise ValueError("Unsupported firmware tool settings")
     with (Path(car_root) / "system/pyproject.toml").open("rb") as stream:
         settings = tomllib.load(stream)["tool"]["drivion"][f"firmware_{kind}"]
+    if kind == "flash":
+        with (Path(car_root) / "config.toml").open("rb") as stream:
+            settings = serial_settings(settings, tomllib.load(stream))
     validator = (
         validate_compile_configuration
         if kind == "compile"
@@ -115,6 +118,16 @@ def tool_settings(car_root, kind):
     )
     validator(settings)
     return settings
+
+
+def serial_settings(settings, runtime):
+    """Use the central link baud for firmware generation, checking and runtime."""
+    if "baud_rate" in settings:
+        raise ValueError("Move firmware_flash.baud_rate to communication.baud_rate")
+    baud = runtime["communication"]["baud_rate"]
+    if type(baud) is not int or not 1 <= baud <= 4000000:
+        raise ValueError("Configure a valid communication.baud_rate")
+    return {**settings, "baud_rate": baud}
 
 
 def validate_compile_configuration(settings):

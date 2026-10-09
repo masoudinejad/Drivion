@@ -23,8 +23,10 @@ docs/                    Architecture and project notes
 ```
 
 The Raspberry Pi runs Python and shell scripts, controls the Arduino Nano, and
-builds and flashes its firmware. Hardware details and the communication protocol
-will be defined in later steps.
+builds and flashes its firmware. The modular serial communication protocol is
+documented in
+[`car/src/communication/README.md`](car/src/communication/README.md); hardware
+control and sensor integration remain separate application responsibilities.
 
 ## Car environment and startup
 
@@ -41,7 +43,8 @@ The environment name and relative path are defined in `car/config.toml` under
 provisioning metadata lives under `tool.drivion` in `car/system/pyproject.toml`.
 Dependencies and their lockfile live in `car/system/`. The supported target is
 64-bit Raspberry Pi OS with Python 3.13.
-NumPy matches the OS camera stack; torch and torchvision use the CPU wheel index.
+NumPy matches the OS camera stack; torch and torchvision use the CPU wheel
+index.
 
 On the Pi, run `~/car/drive.py` from any directory. The system-Python shebang
 starts a small bootstrap which reads the TOML configuration and executes the
