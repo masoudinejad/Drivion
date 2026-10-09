@@ -19,3 +19,32 @@ software metadata plus the current Pi hardware, operating-system, and fallback
 network identity. Moving the SD card to another Pi updates the hardware record
 and hotspot SSID at the next boot. It is separate from user configuration and
 should not be edited. Inspect it with `cat ~/car/system/info.toml` on the Pi.
+
+## System management
+
+Open the central menu from the car directory (Python 3.11 or newer):
+
+```sh
+python3 system/manage.py
+```
+
+It can also be launched by absolute path from any working directory. Use an
+interactive ANSI terminal, including SSH. Arrow keys select a category; Enter
+opens it; Back or Escape exits the main menu; Ctrl-C cancels with status 130.
+The first category, **System Info**, reloads `system/info.toml` on every visit
+and shows all software, hardware, system, and network fields using the shared
+UI theme. Scroll the terminal to inspect long output and press Enter to return.
+Missing or malformed information is displayed as an error page, after which
+the menu remains usable. This view reads the published snapshot; it does not
+refresh hardware information or change configuration. No root access or car
+Python environment is needed.
+
+`manage.py` is the entry point. `management/application.py` owns navigation and
+the `MenuItem` registry; `ui/navigation.py` adapts the existing Bash menu and
+provides read-only pages. `information/view.py` handles loading and rendering
+information separately from boot-time publishing in `information/update.py`.
+To add setup, settings, or administration features, implement an action accepting
+the car root and register a `MenuItem` in `default_items()`. Actions may compose
+submenus with the same UI helpers. Only implemented categories appear in the
+menu. Future configurable behavior belongs in `car/config.toml`; styling stays
+in `ui/theme.toml`.

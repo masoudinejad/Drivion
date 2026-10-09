@@ -1,0 +1,27 @@
+#!/usr/bin/python3
+"""Open the central setup, settings, and administration menu."""
+
+import sys
+from pathlib import Path
+
+# Support execution by absolute path from any working directory.
+CAR_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(CAR_ROOT))
+
+from system.management.application import run_management
+
+
+def main():
+    """Run management using the existing terminal UI and standard library."""
+    try:
+        run_management(CAR_ROOT)
+    except KeyboardInterrupt:
+        return 130
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"System management error: {error}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
