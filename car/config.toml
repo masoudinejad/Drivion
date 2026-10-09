@@ -21,6 +21,25 @@ command_timeout_seconds = 30
 address = "auto"
 sketchbook_directory = "system/arduino/code"
 
+[firmware_compile]
+build_directory = "system/arduino/build"
+header_filename = "drivion_generated.h"
+manifest_filename = "firmware.toml"
+command_timeout_seconds = 300
+
+[firmware_flash]
+log_directory = "system/arduino/logs"
+command_timeout_seconds = 120
+baud_rate = 115200
+query_command = "INFO"
+boot_wait_seconds = 2.0
+query_timeout_seconds = 5.0
+read_timeout_seconds = 0.2
+max_response_bytes = 1024
+
+# Register named sketches here; see system/arduino/README.md for the contract.
+[firmware]
+
 [camera]
 # Automatic exposure is always enabled; sensor bit depth uses system defaults.
 # Output dimensions are independent of sensor resolution.

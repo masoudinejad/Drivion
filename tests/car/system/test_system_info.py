@@ -85,6 +85,30 @@ def test_hotspot_profile_receives_current_ssid():
     assert execute.call_args.kwargs["timeout"] == 30
 
 
+def test_collect_retains_last_firmware_observation(tmp_path):
+    config(tmp_path)
+    tree = tmp_path / "device-tree"
+    device_tree(tree)
+    system_info.publish(
+        tmp_path / "system/info.toml",
+        {
+            "arduino": {
+                "address": "/dev/ttyUSB0",
+                "firmware_name": "motor",
+                "firmware_version": "1.2.0",
+                "firmware_status": "verified",
+                "firmware_checked_at": "then",
+            }
+        },
+    )
+    report = {"status": "ok", "ports": [{"port": {"address": "/dev/ttyUSB0"}}]}
+    with patch.object(system_info, "discover", return_value=report):
+        result = system_info.collect_info(tmp_path, device_tree=tree)["arduino"]
+    assert result["firmware_version"] == "1.2.0"
+    assert result["firmware_checked_at"] == "then"
+    assert result["firmware_status"] == "last_verified"
+
+
 def test_fallback_only_activates_without_an_active_wifi_connection():
     settings = configuration.NetworkSettings(
         "/usr/bin/nmcli",

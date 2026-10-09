@@ -7,6 +7,21 @@ from pathlib import Path
 from .theme import load_theme
 
 
+def confirm(question):
+    """Use the shared confirmation UI; never treat UI failure as approval."""
+    result = subprocess.run(
+        ["bash", str(Path(__file__).with_name("confirm.sh")), "--question", question],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 130:
+        raise KeyboardInterrupt
+    if result.returncode not in (0, 1):
+        raise RuntimeError(result.stderr.strip() or "Unable to ask for confirmation")
+    return result.returncode == 0
+
+
 def select_item(title, labels):
     """Return a zero-based selection, or None for Back; propagate cancellation."""
     result = subprocess.run(

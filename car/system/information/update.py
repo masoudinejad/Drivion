@@ -12,7 +12,7 @@ from pathlib import Path
 
 import tomllib
 
-from ..arduino.discover import compact_report, discover
+from ..arduino.discover import compact_report, discover, retain_firmware_info
 from ..configuration import network_settings
 
 INFO_PATH = Path("system/info.toml")
@@ -128,12 +128,16 @@ def collect_info(
     config_root = Path(config_root) if config_root is not None else car_root
     settings = network_settings(config_root)
     hardware = hardware_info(device_tree)
+    info_file = car_root / INFO_PATH
+    previous = tomllib.loads(info_file.read_text()) if info_file.exists() else {}
     return {
         "software": (
             existing_software(car_root / INFO_PATH) if software is None else software
         ),
         "hardware": hardware,
-        "arduino": compact_report(discover(car_root, config_root)),
+        "arduino": retain_firmware_info(
+            compact_report(discover(car_root, config_root)), previous.get("arduino", {})
+        ),
         "system": {
             "hostname": socket.gethostname(),
             "operating_system": _os_name(),

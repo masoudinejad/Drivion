@@ -149,9 +149,24 @@ class AppConfig(ConfigModel):
 
     system: SystemConfig
     arduino: ArduinoConfig
+    firmware_compile: dict[str, object]
+    firmware_flash: dict[str, object]
+    firmware: dict[str, dict[str, object]]
     camera: CameraConfig
     joystick: EmptyConfig = Field(default_factory=EmptyConfig)
     drive: EmptyConfig = Field(default_factory=EmptyConfig)
     inference: EmptyConfig = Field(default_factory=EmptyConfig)
     recording: EmptyConfig = Field(default_factory=EmptyConfig)
     logging: EmptyConfig = Field(default_factory=EmptyConfig)
+
+    @model_validator(mode="after")
+    def valid_firmware_configuration(self):
+        from car.system.arduino.compile import validate_compile_configuration
+        from car.system.arduino.firmware import validate_flash_configuration
+
+        try:
+            validate_compile_configuration(self.firmware_compile, self.firmware)
+            validate_flash_configuration(self.firmware_flash)
+        except TypeError as error:
+            raise ValueError(str(error)) from error
+        return self

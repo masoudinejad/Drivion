@@ -7,10 +7,45 @@ from unittest.mock import patch
 
 import tomllib
 
-from car.system.arduino.discover import compact_report, discover
+from car.system.arduino.discover import compact_report, discover, retain_firmware_info
 from car.system.information.update import render_info
 
 ROOT = Path(__file__).resolve().parents[3] / "car"
+
+
+def test_refresh_retains_timestamped_identity_only_on_same_device():
+    identity = {
+        "address": "/dev/ttyUSB0",
+        "serialNumber": "usb-id",
+        "vid": "v",
+        "pid": "p",
+    }
+    previous = {
+        **identity,
+        "firmware_name": "motor",
+        "firmware_status": "verified",
+        "firmware_checked_at": "then",
+    }
+    current = retain_firmware_info(dict(identity), previous)
+    assert current["firmware_name"] == "motor"
+    assert current["firmware_status"] == "last_verified"
+    assert current["firmware_checked_at"] == "then"
+    replacement = retain_firmware_info(
+        {**identity, "serialNumber": "new-device"}, previous
+    )
+    assert "firmware_name" not in replacement
+    assert "firmware_name" not in retain_firmware_info({"ports": []}, previous)
+
+
+def test_refresh_preserves_identity_when_port_count_changes():
+    previous = {"address": "/dev/ttyUSB0", "firmware_version": "1.0"}
+    current = retain_firmware_info(
+        {"ports": [{"address": "/dev/ttyUSB0"}, {"address": "/dev/ttyUSB1"}]}, previous
+    )
+    assert current["ports"][0]["firmware_version"] == "1.0"
+    assert "firmware_version" not in current["ports"][1]
+    flattened = retain_firmware_info({"address": "/dev/ttyUSB0"}, current)
+    assert flattened["firmware_version"] == "1.0"
 
 
 def response(value):

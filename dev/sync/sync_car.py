@@ -36,6 +36,22 @@ def tool_settings():
         not isinstance(pattern, str) or not pattern for pattern in excludes
     ):
         raise TypeError("Configure sync exclusions as non-empty strings")
+    # Preserve generated Pi-side builds/logs even with rsync --delete. Paths
+    # follow the car's central TOML rather than duplicated sync configuration.
+    with (CAR_DIR / "config.toml").open("rb") as stream:
+        car_config = tomllib.load(stream)
+    for section, key in (
+        ("firmware_compile", "build_directory"),
+        ("firmware_flash", "log_directory"),
+    ):
+        path = Path(car_config[section][key])
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or not path.is_relative_to("system/arduino")
+        ):
+            raise ValueError("Configure safe Arduino generated-file paths before sync")
+        excludes.append(f"/{path.as_posix()}/")
     return timeout, tuple(excludes)
 
 

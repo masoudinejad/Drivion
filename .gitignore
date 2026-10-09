@@ -217,6 +217,7 @@ node_modules/
 car/system/version.toml
 car/system/info.toml
 car/system/env/
+car/system/arduino/logs/
 
 # Marimo
 marimo/_static/

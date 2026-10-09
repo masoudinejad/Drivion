@@ -60,6 +60,10 @@ class SyncTests(unittest.TestCase):
             environment.mkdir(parents=True)
             (environment / "marker").write_text("keep")
             (target / ".env").write_text("keep")
+            for name in ("logs", "build"):
+                generated = target / "system/arduino" / name
+                generated.mkdir(parents=True)
+                (generated / "marker").write_text("keep")
             with patch.object(sync_car, "CAR_DIR", source):
                 command = sync_car.build_command(self.settings)
             # Exercise the exact transfer flags and exclusions against a local destination.
@@ -81,6 +85,10 @@ class SyncTests(unittest.TestCase):
             self.assertEqual((environment / "marker").read_text(), "keep")
             self.assertEqual((target / ".env").read_text(), "keep")
             self.assertEqual((home / "personal.txt").read_text(), "keep")
+            for name in ("logs", "build"):
+                self.assertEqual(
+                    (target / "system/arduino" / name / "marker").read_text(), "keep"
+                )
 
 
 if __name__ == "__main__":

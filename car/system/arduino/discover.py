@@ -218,6 +218,38 @@ def format_summary(report):
     return "\n".join(lines)
 
 
+def retain_firmware_info(current, previous):
+    """Preserve last-observed firmware only for the same USB identity and address.
+
+    Discovery does not open/reset the board to re-query firmware. Cached fields
+    keep their observation timestamp; a previous verified result becomes
+    last_verified on refresh. Adapters without serial numbers cannot distinguish
+    replacement boards sharing VID/PID and address, so this is historical data.
+    """
+    previous_ports = previous.get("ports", [previous])
+    for port in current.get("ports", [current]):
+        matches = [
+            old
+            for old in previous_ports
+            if port.get("address")
+            and all(
+                port.get(key) == old.get(key)
+                for key in ("address", "serialNumber", "vid", "pid")
+            )
+        ]
+        if len(matches) == 1:
+            port.update(
+                {
+                    key: value
+                    for key, value in matches[0].items()
+                    if key.startswith("firmware_")
+                }
+            )
+            if port.get("firmware_status") == "verified":
+                port["firmware_status"] = "last_verified"
+    return current
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--car-root", type=Path, required=True)
@@ -237,7 +269,9 @@ def main(argv=None):
         path = args.car_root / INFO_PATH
         sections = tomllib.loads(path.read_text()) if path.exists() else {}
         report = discover(args.car_root, args.config_root)
-        sections["arduino"] = compact_report(report)
+        sections["arduino"] = retain_firmware_info(
+            compact_report(report), sections.get("arduino", {})
+        )
         publish(path, sections)
         print(json.dumps(report, indent=2) if args.verbose else format_summary(report))
         return 0 if sections["arduino"]["status"] == "ok" else 1
