@@ -166,10 +166,24 @@ class ArduinoProvisioningConfig(ConfigModel):
         return self
 
 
+class ArduinoDiscoveryConfig(ConfigModel):
+    """Bound discovery and CLI execution without hidden timeout defaults."""
+
+    discovery_timeout_seconds: int = Field(ge=1, le=300)
+    command_timeout_seconds: int = Field(ge=1, le=600)
+
+    @model_validator(mode="after")
+    def valid_timeouts(self):
+        if self.command_timeout_seconds <= self.discovery_timeout_seconds:
+            raise ValueError("command timeout must exceed discovery timeout")
+        return self
+
+
 class ArduinoConfig(ConfigModel):
     """Arduino runtime and provisioning settings."""
 
     provisioning: ArduinoProvisioningConfig | None = None
+    discovery: ArduinoDiscoveryConfig | None = None
     communication: EmptyConfig = Field(default_factory=EmptyConfig)
     flashing: EmptyConfig = Field(default_factory=EmptyConfig)
 
