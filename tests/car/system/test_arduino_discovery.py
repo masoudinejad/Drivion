@@ -45,7 +45,8 @@ def test_candidates_unknown_ports_and_nested_metadata():
         ],
     ) as execute:
         report = discover(ROOT)
-    assert report["status"] == "ok"
+    assert report["status"] == "partial"
+    assert report["selection"]["status"] == "ambiguous"
     assert report["ports"][1]["identification"] == "unidentified"
     assert (
         report["ports"][0]["matching_boards"][0]["specifications"]["config_options"]
@@ -125,3 +126,33 @@ def test_detail_failure_retains_port():
         report = discover(ROOT)
     assert report["status"] == "partial"
     assert report["ports"][0]["port"]["address"] == "usb"
+
+
+def test_single_port_is_selected_automatically():
+    listing = {
+        "detected_ports": [{"port": {"address": "/dev/ttyUSB0"}, "matching_boards": []}]
+    }
+    with patch(
+        "car.system.arduino.discover.subprocess.run",
+        side_effect=[response(listing), response({"platforms": []})],
+    ):
+        report = discover(ROOT)
+    assert report["selection"] == {
+        "status": "selected",
+        "address": "/dev/ttyUSB0",
+    }
+
+
+def test_malformed_nested_cli_output_is_reported():
+    listing = {
+        "detected_ports": [
+            {"port": {"address": "/dev/ttyUSB0"}, "matching_boards": "invalid"}
+        ]
+    }
+    with patch(
+        "car.system.arduino.discover.subprocess.run",
+        return_value=response(listing),
+    ):
+        report = discover(ROOT)
+    assert report["status"] == "error"
+    assert "matching_boards" in report["error"]

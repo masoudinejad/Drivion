@@ -5,8 +5,27 @@ import subprocess
 import sys
 from pathlib import Path
 
+import tomllib
+
 ROOT = Path(__file__).resolve().parents[2]
-CPP_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ino"}
+
+
+def configured_extensions():
+    """Read the file classes handled by the project quality tools."""
+    with (ROOT / "dev/pyproject.toml").open("rb") as stream:
+        values = tomllib.load(stream)["tool"]["drivion"]["quality"]
+    expected = {"python_extensions", "markdown_extensions", "cpp_extensions"}
+    if set(values) != expected or any(
+        not isinstance(items, list)
+        or not items
+        or any(not isinstance(item, str) or not item.startswith(".") for item in items)
+        for items in values.values()
+    ):
+        raise ValueError("Configure valid tool.drivion.quality extension lists")
+    return tuple(
+        set(values[name])
+        for name in ("python_extensions", "markdown_extensions", "cpp_extensions")
+    )
 
 
 def main():
@@ -28,9 +47,12 @@ def main():
             if name and (ROOT / name.decode()).is_file()
         }
     )
-    python = [name for name in files if Path(name).suffix in {".py", ".pyi"}]
-    markdown = [name for name in files if Path(name).suffix.lower() == ".md"]
-    cpp = [name for name in files if Path(name).suffix in CPP_EXTENSIONS]
+    python_extensions, markdown_extensions, cpp_extensions = configured_extensions()
+    python = [name for name in files if Path(name).suffix in python_extensions]
+    markdown = [
+        name for name in files if Path(name).suffix.lower() in markdown_extensions
+    ]
+    cpp = [name for name in files if Path(name).suffix in cpp_extensions]
     commands = []
     if python:
         commands.append(["ruff", "check", *([] if args.check else ["--fix"]), *python])

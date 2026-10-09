@@ -12,9 +12,9 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 if __package__:
-    from .provisioning import system_settings
+    from .provisioning import system_settings, verification_timeout
 else:
-    from provisioning import system_settings
+    from provisioning import system_settings, verification_timeout
 
 
 def verification_plan(car_root):
@@ -52,6 +52,7 @@ def verification_plan(car_root):
 
 def verify(car_root):
     failures = []
+    timeout = verification_timeout(car_root)
     for requirement, module in verification_plan(car_root):
         label = str(requirement) if requirement else f"system:{module}"
         try:
@@ -69,7 +70,7 @@ def verify(car_root):
                     f"import importlib; importlib.import_module({module!r})",
                 ],
                 check=True,
-                timeout=180,
+                timeout=timeout,
             )
             print(f"OK: {label}", flush=True)
         except (

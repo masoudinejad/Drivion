@@ -1,7 +1,7 @@
 - name: Check for the fallback hotspot profile
   ansible.builtin.command:
     argv:
-      - nmcli
+      - "{{ wifi_command_path }}"
       - connection
       - show
       - "{{ wifi_fallback_profile }}"
@@ -13,7 +13,7 @@
 - name: Create the fallback hotspot profile
   ansible.builtin.command:
     argv:
-      - nmcli
+      - "{{ wifi_command_path }}"
       - connection
       - add
       - type
@@ -27,10 +27,28 @@
   when: hotspot_profile.rc != 0 and not ansible_check_mode
   changed_when: true
 
+- name: Inspect the fallback hotspot settings
+  ansible.builtin.command:
+    argv:
+      - "{{ wifi_command_path }}"
+      - --show-secrets
+      - --escape
+      - "no"
+      - --get-values
+      - connection.autoconnect,connection.interface-name,802-11-wireless.mode,ipv4.method,ipv4.addresses,ipv6.method,802-11-wireless-security.key-mgmt,802-11-wireless-security.psk
+      - connection
+      - show
+      - "{{ wifi_fallback_profile }}"
+  register: hotspot_configuration
+  changed_when: false
+  check_mode: false
+  no_log: true
+  when: hotspot_profile.rc == 0
+
 - name: Configure the fallback hotspot profile
   ansible.builtin.command:
     argv:
-      - nmcli
+      - "{{ wifi_command_path }}"
       - connection
       - modify
       - "{{ wifi_fallback_profile }}"
@@ -50,7 +68,20 @@
       - wpa-psk
       - wifi-sec.psk
       - "{{ lookup('ansible.builtin.env', 'DRIVION_HOTSPOT_PASSWORD') }}"
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - >-
+      hotspot_profile.rc != 0 or
+      hotspot_configuration.stdout_lines | default([]) != [
+        'no',
+        wifi_interface,
+        'ap',
+        'shared',
+        wifi_fallback_ipv4_cidr,
+        'disabled',
+        'wpa-psk',
+        lookup('ansible.builtin.env', 'DRIVION_HOTSPOT_PASSWORD')
+      ]
   changed_when: true
   no_log: true
 
@@ -62,6 +93,19 @@
       {{ wifi_fallback_delay_seconds }} seconds after boot only when Wi-Fi has
       no active connection.
   when: ansible_check_mode
+  changed_when: >-
+    hotspot_profile.rc != 0 or
+    hotspot_configuration.stdout_lines | default([]) != [
+      'no',
+      wifi_interface,
+      'ap',
+      'shared',
+      wifi_fallback_ipv4_cidr,
+      'disabled',
+      'wpa-psk',
+      lookup('ansible.builtin.env', 'DRIVION_HOTSPOT_PASSWORD')
+    ]
+  no_log: true
 
 - name: Remove the superseded version-only record
   ansible.builtin.file:
@@ -76,15 +120,30 @@
     group: root
     mode: "0755"
   loop:
-    - /usr/local/lib/drivion/system
-    - /usr/local/lib/drivion/system/information
-    - /usr/local/lib/drivion/system/network
-    - /usr/local/lib/drivion/system/arduino
+    - "{{ service_library_directory }}/system"
+    - "{{ service_library_directory }}/system/information"
+    - "{{ service_library_directory }}/system/network"
+    - "{{ service_library_directory }}/system/arduino"
+    - "{{ service_configuration_directory }}"
+    - "{{ service_configuration_directory }}/system"
+
+- name: Install the protected Drivion service configuration
+  ansible.builtin.copy:
+    src: "{{ controller_root }}/car/{{ item.source }}"
+    dest: "{{ service_configuration_directory }}/{{ item.destination }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - source: config.toml
+      destination: config.toml
+    - source: system/pyproject.toml
+      destination: system/pyproject.toml
 
 - name: Install the protected Drivion service modules
   ansible.builtin.copy:
     src: "{{ controller_root }}/car/system/{{ item.source }}"
-    dest: "/usr/local/lib/drivion/system/{{ item.destination }}"
+    dest: "{{ service_library_directory }}/system/{{ item.destination }}"
     owner: root
     group: root
     mode: "0644"
@@ -109,7 +168,7 @@
 - name: Install the system information service
   ansible.builtin.template:
     src: network/drivion-system-info.service.j2
-    dest: /etc/systemd/system/drivion-system-info.service
+    dest: "{{ systemd_unit_directory }}/drivion-system-info.service"
     owner: root
     group: root
     mode: "0644"
@@ -117,7 +176,7 @@
 - name: Install the Wi-Fi fallback service
   ansible.builtin.template:
     src: network/drivion-wifi-fallback.service.j2
-    dest: /etc/systemd/system/drivion-wifi-fallback.service
+    dest: "{{ systemd_unit_directory }}/drivion-wifi-fallback.service"
     owner: root
     group: root
     mode: "0644"
@@ -125,7 +184,7 @@
 - name: Install the Wi-Fi fallback timer
   ansible.builtin.template:
     src: network/drivion-wifi-fallback.timer.j2
-    dest: /etc/systemd/system/drivion-wifi-fallback.timer
+    dest: "{{ systemd_unit_directory }}/drivion-wifi-fallback.timer"
     owner: root
     group: root
     mode: "0644"

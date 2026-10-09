@@ -3,5 +3,5 @@
     name: "{{ system_packages }}"
     state: present
     install_recommends: false
-    lock_timeout: 120
+    lock_timeout: "{{ apt_lock_timeout_seconds }}"
     auto_install_module_deps: false

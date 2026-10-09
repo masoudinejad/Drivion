@@ -22,6 +22,6 @@ if __name__ == "__main__":
 
     try:
         print(environment_path(sys.argv[1]))
-    except (KeyError, OSError, ValueError) as error:
+    except (KeyError, OSError, TypeError, ValueError) as error:
         print(f"Environment configuration error: {error}", file=sys.stderr)
         sys.exit(1)

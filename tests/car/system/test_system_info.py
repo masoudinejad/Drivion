@@ -22,6 +22,7 @@ def mock_discovery():
 def config(root):
     (root / "config.toml").write_text(
         """[system.network]
+command_path = "/usr/bin/nmcli"
 wifi_interface = "wlan0"
 fallback_profile = "drivion-hotspot"
 fallback_ssid_prefix = "Drivion"
@@ -30,6 +31,7 @@ fallback_ipv4_address = "10.42.0.1"
 fallback_ipv4_prefix_length = 24
 fallback_delay_seconds = 60
 fallback_timer_accuracy_seconds = 1
+command_timeout_seconds = 30
 """
     )
 
@@ -65,17 +67,36 @@ def test_publish_preserves_software_and_refreshes_changed_hardware(tmp_path):
 
 def test_hotspot_profile_receives_current_ssid():
     settings = configuration.NetworkSettings(
-        "wlan0", "drivion-hotspot", "Drivion", 6, "10.42.0.1", 24, 60, 1
+        "/usr/bin/nmcli",
+        "wlan0",
+        "drivion-hotspot",
+        "Drivion",
+        6,
+        "10.42.0.1",
+        24,
+        60,
+        1,
+        30,
     )
     with patch.object(system_info.subprocess, "run") as execute:
         system_info.update_hotspot(settings, "Drivion-A4F29C")
     assert execute.call_args.args[0][-1] == "Drivion-A4F29C"
     assert execute.call_args.kwargs["check"] is True
+    assert execute.call_args.kwargs["timeout"] == 30
 
 
 def test_fallback_only_activates_without_an_active_wifi_connection():
     settings = configuration.NetworkSettings(
-        "wlan0", "drivion-hotspot", "Drivion", 6, "10.42.0.1", 24, 60, 1
+        "/usr/bin/nmcli",
+        "wlan0",
+        "drivion-hotspot",
+        "Drivion",
+        6,
+        "10.42.0.1",
+        24,
+        60,
+        1,
+        30,
     )
     connected = subprocess.CompletedProcess([], 0, stdout="home-wifi\n")
     disconnected = subprocess.CompletedProcess([], 0, stdout="--\n")
@@ -89,10 +110,11 @@ def test_fallback_only_activates_without_an_active_wifi_connection():
     ) as run:
         assert wifi_fallback.activate_fallback(settings)
         assert run.call_args.args[0] == [
-            "nmcli",
+            "/usr/bin/nmcli",
             "connection",
             "up",
             "drivion-hotspot",
             "ifname",
             "wlan0",
         ]
+    assert run.call_args.kwargs["timeout"] == 30

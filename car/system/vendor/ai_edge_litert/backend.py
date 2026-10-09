@@ -8,12 +8,32 @@ from pathlib import Path
 from urllib.request import urlopen
 from zipfile import ZipFile
 
-WHEEL = "ai_edge_litert-2.3.0-cp313-cp313-manylinux_2_27_aarch64.whl"
-URL = (
-    "https://files.pythonhosted.org/packages/"
-    "b2/ad/234674ab4781ff1822c26794488b5640512bc61011a6b3490bfecdc46aa1/" + WHEEL
-)
-SHA256 = "2ab71e4f5dfa65b3882634b42755f455f3e7415630d720200bd792733e15e257"
+import tomllib
+
+
+def upstream_wheel():
+    """Read and validate the pinned upstream artifact from project TOML."""
+    with Path(__file__).with_name("pyproject.toml").open("rb") as source:
+        values = tomllib.load(source)["tool"]["drivion"]["upstream-wheel"]
+    if set(values) != {
+        "filename",
+        "url",
+        "sha256",
+        "download_timeout_seconds",
+    }:
+        raise ValueError("Configure exactly the supported upstream wheel settings")
+    if not values["filename"].endswith(".whl") or "/" in values["filename"]:
+        raise ValueError("Configure a valid upstream wheel filename")
+    if not values["url"].startswith("https://"):
+        raise ValueError("Configure a secure upstream wheel URL")
+    if len(values["sha256"]) != 64 or any(
+        character not in "0123456789abcdef" for character in values["sha256"]
+    ):
+        raise ValueError("Configure a valid upstream wheel checksum")
+    timeout = values["download_timeout_seconds"]
+    if type(timeout) is not int or not 1 <= timeout <= 600:
+        raise ValueError("Configure a valid upstream wheel download timeout")
+    return values
 
 
 def repair_wheel(source, destination):
@@ -50,12 +70,15 @@ def repair_wheel(source, destination):
 
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    with urlopen(URL, timeout=120) as response:
+    settings = upstream_wheel()
+    with urlopen(
+        settings["url"], timeout=settings["download_timeout_seconds"]
+    ) as response:
         data = response.read()
-    if hashlib.sha256(data).hexdigest() != SHA256:
+    if hashlib.sha256(data).hexdigest() != settings["sha256"]:
         raise ValueError("Upstream LiteRT wheel checksum does not match")
-    repair_wheel(io.BytesIO(data), Path(wheel_directory) / WHEEL)
-    return WHEEL
+    repair_wheel(io.BytesIO(data), Path(wheel_directory) / settings["filename"])
+    return settings["filename"]
 
 
 def get_requires_for_build_wheel(config_settings=None):

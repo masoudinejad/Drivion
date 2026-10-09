@@ -118,16 +118,22 @@ def existing_software(info_file):
         return {}
 
 
-def collect_info(car_root, software=None, device_tree=Path("/proc/device-tree")):
+def collect_info(
+    car_root,
+    software=None,
+    device_tree=Path("/proc/device-tree"),
+    config_root=None,
+):
     car_root = Path(car_root)
-    settings = network_settings(car_root)
+    config_root = Path(config_root) if config_root is not None else car_root
+    settings = network_settings(config_root)
     hardware = hardware_info(device_tree)
     return {
         "software": (
             existing_software(car_root / INFO_PATH) if software is None else software
         ),
         "hardware": hardware,
-        "arduino": compact_report(discover(car_root)),
+        "arduino": compact_report(discover(car_root, config_root)),
         "system": {
             "hostname": socket.gethostname(),
             "operating_system": _os_name(),
@@ -170,7 +176,7 @@ def publish(info_file, sections):
 def update_hotspot(settings, ssid):
     subprocess.run(
         [
-            "nmcli",
+            settings.command_path,
             "connection",
             "modify",
             settings.fallback_profile,
@@ -182,12 +188,18 @@ def update_hotspot(settings, ssid):
             ssid,
         ],
         check=True,
+        timeout=settings.command_timeout_seconds,
     )
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--car-root", type=Path, required=True)
+    parser.add_argument(
+        "--config-root",
+        type=Path,
+        help="Root containing protected config.toml and system/pyproject.toml",
+    )
     parser.add_argument("--software-stdin", action="store_true")
     parser.add_argument("--device-tree", type=Path, default=Path("/proc/device-tree"))
     parser.add_argument("--update-hotspot", action="store_true")
@@ -195,8 +207,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         software = software_from_text(sys.stdin.read()) if args.software_stdin else None
-        settings = network_settings(args.car_root)
-        sections = collect_info(args.car_root, software, args.device_tree)
+        config_root = args.config_root or args.car_root
+        settings = network_settings(config_root)
+        sections = collect_info(
+            args.car_root, software, args.device_tree, config_root=config_root
+        )
         content = publish(args.car_root / INFO_PATH, sections)
         if args.update_hotspot:
             update_hotspot(settings, sections["network"]["fallback_ssid"])
@@ -208,7 +223,7 @@ def main(argv=None):
         RuntimeError,
         TypeError,
         ValueError,
-        subprocess.CalledProcessError,
+        subprocess.SubprocessError,
     ) as error:
         print(f"System information error: {error}", file=sys.stderr)
         return 1

@@ -12,7 +12,7 @@
 
 - name: Preview the configured environment
   ansible.builtin.debug:
-    msg: "Provision {{ car_environment_path }} with /usr/bin/python3 and system-site-packages, then sync frozen car dependencies."
+    msg: "Provision {{ car_environment_path }} with {{ service_python_executable }} and system-site-packages, then sync frozen car dependencies."
   when: ansible_check_mode
 
 - name: Provision and verify the car environment
@@ -22,7 +22,7 @@
     - name: Read the car environment path from deployed TOML
       ansible.builtin.command:
         argv:
-          - /usr/bin/python3
+          - "{{ service_python_executable }}"
           - "{{ car_root }}/system/environment.py"
           - "{{ car_root }}"
       register: configured_environment
@@ -41,7 +41,7 @@
           - "{{ uv_executable_directory }}/uv"
           - venv
           - --python
-          - /usr/bin/python3
+          - "{{ service_python_executable }}"
           - --system-site-packages
           - --prompt
           - "{{ car_environment_name }}"
@@ -51,14 +51,16 @@
     - name: Verify the environment inherits the system Python packages
       ansible.builtin.command:
         argv:
-          - /usr/bin/python3
+          - "{{ service_python_executable }}"
           - -c
           - >-
             import pathlib, sys;
             cfg = (pathlib.Path(sys.argv[1]) / 'pyvenv.cfg').read_text();
             assert 'include-system-site-packages = true' in cfg;
-            assert 'home = /usr/bin' in cfg, 'Environment must use OS Python'
+            expected = f'home = {pathlib.Path(sys.argv[2]).parent}';
+            assert expected in cfg, 'Environment must use configured system Python'
           - "{{ car_environment_path }}"
+          - "{{ service_python_executable }}"
       changed_when: false
 
     - name: Install the locked Python dependencies
@@ -70,13 +72,13 @@
           - "{{ car_root }}/system"
           - --frozen
           - --python
-          - /usr/bin/python3
+          - "{{ service_python_executable }}"
           - --no-python-downloads
       environment:
         UV_PROJECT_ENVIRONMENT: "{{ car_environment_path }}"
-        UV_CONCURRENT_DOWNLOADS: "2"
-        UV_CONCURRENT_BUILDS: "1"
-        UV_CONCURRENT_INSTALLS: "1"
+        UV_CONCURRENT_DOWNLOADS: "{{ uv_concurrent_downloads }}"
+        UV_CONCURRENT_BUILDS: "{{ uv_concurrent_builds }}"
+        UV_CONCURRENT_INSTALLS: "{{ uv_concurrent_installs }}"
       register: environment_sync
       changed_when: "'Installed ' in environment_sync.stderr or 'Uninstalled ' in environment_sync.stderr"
 
@@ -97,15 +99,15 @@
           - "{{ car_root }}/system/verify_environment.py"
           - "{{ car_root }}"
       environment:
-        OMP_NUM_THREADS: "1"
-        OPENBLAS_NUM_THREADS: "1"
-        TF_NUM_INTEROP_THREADS: "1"
-        TF_NUM_INTRAOP_THREADS: "1"
+        OMP_NUM_THREADS: "{{ numerical_thread_limit }}"
+        OPENBLAS_NUM_THREADS: "{{ numerical_thread_limit }}"
+        TF_NUM_INTEROP_THREADS: "{{ numerical_thread_limit }}"
+        TF_NUM_INTRAOP_THREADS: "{{ numerical_thread_limit }}"
       changed_when: false
 
     - name: Verify the executable car entry point from outside the car directory
       ansible.builtin.command:
         argv:
           - "{{ car_root }}/drive.py"
-        chdir: /tmp
+        chdir: "{{ temporary_directory }}"
       changed_when: false

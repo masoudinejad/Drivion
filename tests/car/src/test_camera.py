@@ -7,7 +7,12 @@ import pytest
 from PIL import Image
 
 from car.src.camera import camera as module
-from car.src.camera.config import CameraConfig
+from car.src.config import load_config
+
+
+def camera_config(**overrides):
+    """Use central TOML as the only source of camera defaults."""
+    return load_config().camera.with_overrides(**overrides)
 
 
 class FakeCamera:
@@ -61,7 +66,7 @@ def device(monkeypatch):
 
 
 def test_explicit_configuration_and_rgb_owned_capture(device):
-    config = CameraConfig()
+    config = camera_config()
     with module.Camera(config) as camera:
         assert device.requested["sensor"] == {"output_size": (1640, 1232)}
         assert device.requested["main"]["format"] == "BGR888"
@@ -85,7 +90,7 @@ def test_explicit_configuration_and_rgb_owned_capture(device):
 
 
 def test_y_capture_removes_chroma_stride_and_pads_without_cropping(device):
-    with module.Camera(CameraConfig(width=640, height=640, channels="y")) as camera:
+    with module.Camera(camera_config(width=640, height=640, channels="y")) as camera:
         frame = camera.single_capture()
         assert frame.shape == (640, 640)
         width, height = camera._stream_size
@@ -98,13 +103,13 @@ def test_y_capture_removes_chroma_stride_and_pads_without_cropping(device):
 
 
 def test_configured_sensor_dimensions_are_used(device):
-    with module.Camera(CameraConfig(sensor_width=3280, sensor_height=2464)):
+    with module.Camera(camera_config(sensor_width=3280, sensor_height=2464)):
         assert device.requested["sensor"] == {"output_size": (3280, 2464)}
 
 
 def test_unsupported_fps_releases_device(device):
     with pytest.raises(ValueError, match="frame duration limits"):
-        module.Camera(CameraConfig(frame_rate=60))
+        module.Camera(camera_config(frame_rate=60))
     assert device.closed
     assert not device.started
 
@@ -122,7 +127,7 @@ def test_adjusted_dimensions_fail_instead_of_silently_changing_settings(device, 
 
     device.configure = adjusted
     with pytest.raises(ValueError, match="dimensions"):
-        module.Camera(CameraConfig())
+        module.Camera(camera_config())
     assert device.closed
 
 
@@ -132,7 +137,7 @@ def test_start_failure_releases_device_and_keeps_original_error(device):
 
     device.start = fail
     with pytest.raises(RuntimeError, match="start failed"):
-        module.Camera(CameraConfig())
+        module.Camera(camera_config())
     assert device.closed
 
 
@@ -143,7 +148,7 @@ def test_context_closes_device_when_capture_fails(device):
     device.capture_array = fail
     with (
         pytest.raises(RuntimeError, match="capture failed"),
-        module.Camera(CameraConfig()) as camera,
+        module.Camera(camera_config()) as camera,
     ):
         camera.single_capture()
     assert device.closed and device.stopped
@@ -152,7 +157,7 @@ def test_context_closes_device_when_capture_fails(device):
 @pytest.mark.parametrize("channels", ["rgb", "y"])
 @pytest.mark.parametrize("file_format", ["numpy", "jpeg"])
 def test_save_capture_roundtrip(device, tmp_path, channels, file_format):
-    config = CameraConfig(channels=channels, file_format=file_format)
+    config = camera_config(channels=channels, file_format=file_format)
     with module.Camera(config) as camera:
         path = camera.save_capture(tmp_path / "frame")
         original = camera.current_img
@@ -172,7 +177,7 @@ def test_save_capture_roundtrip(device, tmp_path, channels, file_format):
 
 
 def test_save_rejects_misleading_suffix_and_wrong_shape(tmp_path):
-    config = CameraConfig()
+    config = camera_config()
     frame = np.zeros((480, 640, 3), np.uint8)
     with pytest.raises(ValueError, match="suffix"):
         module.save_frame(frame, tmp_path / "frame.jpg", config)

@@ -60,6 +60,7 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path):
     shutil.copy(
         source / "system/configuration.py", tmp_path / "system/configuration.py"
     )
+    shutil.copy(source / "system/pyproject.toml", tmp_path / "system/pyproject.toml")
     shutil.copytree(source / "system/information", tmp_path / "system/information")
     shutil.copytree(source / "system/arduino", tmp_path / "system/arduino")
     device_tree = tmp_path / "device-tree"
@@ -112,6 +113,8 @@ def test_success_publishes_and_caches_record(tmp_path):
     car = tmp_path / "car"
     (car / "system").mkdir(parents=True)
     (car / "drive.py").write_text("code")
+    source = Path(versioning.__file__).parents[2] / "car"
+    shutil.copy(source / "system/pyproject.toml", car / "system/pyproject.toml")
     settings = {"PI_HOST": "pi.local", "PI_USER": "driver"}
     record = {"version": "abc", "commit": "abc", "dirty": True}
     with (

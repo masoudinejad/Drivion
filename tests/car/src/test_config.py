@@ -5,8 +5,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from car.src.camera.config import CameraConfig
 from car.src.config import AppConfig, load_config, update_config
+
+REPOSITORY_CONFIG = Path(__file__).parents[3] / "car/config.toml"
+
+
+def camera_config(**overrides):
+    """Use central TOML as the only source of camera defaults."""
+    return load_config().camera.with_overrides(**overrides)
 
 
 def test_repository_config_loads():
@@ -17,22 +23,22 @@ def test_repository_config_loads():
     assert config.system.python_environment.name == "drivion"
     assert config.system.network.fallback_ipv4_address == "10.42.0.1"
     assert config.system.network.fallback_delay_seconds == 60
-    assert config.system.provisioning.uv.version == "0.12.20"
-    assert config.system.provisioning.uv.executable_directory == "/usr/local/bin"
-    assert config.arduino.provisioning is not None
-    assert len(config.arduino.provisioning.cli_archive_sha256) == 64
+    assert config.arduino.address == "auto"
+    assert config.arduino.sketchbook_directory == "system/arduino/code"
+    assert config.camera.jpeg_quality == 95
+    assert config.camera.buffer_count == 4
 
 
 def test_update_config_preserves_comments_and_permissions(tmp_path):
     path = tmp_path / "config.toml"
-    path.write_text('# Settings\n[camera]\nframe_rate = 41.0 # FPS\nchannels = "rgb"\n')
+    original = REPOSITORY_CONFIG.read_text()
+    path.write_text(original)
     path.chmod(0o640)
     config = update_config("camera.frame_rate", 30.0, path)
     assert config.camera.frame_rate == 30.0
     assert load_config(path) == config
-    assert path.read_text() == (
-        '# Settings\n[camera]\nframe_rate = 30.0 # FPS\nchannels = "rgb"\n'
-    )
+    assert "frame_rate = 30.0 # Frames per second" in path.read_text()
+    assert "frame_rate = 41.0 # Frames per second" in original
     assert path.stat().st_mode & 0o777 == 0o640
 
 
@@ -51,7 +57,7 @@ def test_update_config_rejects_changes_without_writing(
     tmp_path, parameter, value, error
 ):
     path = tmp_path / "config.toml"
-    original = b"[camera]\nframe_rate = 41.0\n"
+    original = REPOSITORY_CONFIG.read_bytes()
     path.write_bytes(original)
     with pytest.raises(error):
         update_config(parameter, value, path)
@@ -60,7 +66,7 @@ def test_update_config_rejects_changes_without_writing(
 
 def test_update_config_validates_related_settings(tmp_path):
     path = tmp_path / "config.toml"
-    original = (Path(__file__).parents[3] / "car/config.toml").read_bytes()
+    original = REPOSITORY_CONFIG.read_bytes()
     path.write_bytes(original)
     with pytest.raises(ValidationError):
         update_config("system.network.fallback_timer_accuracy_seconds", 61, path)
@@ -69,7 +75,7 @@ def test_update_config_validates_related_settings(tmp_path):
 
 def test_update_config_failed_replace_leaves_original(tmp_path, monkeypatch):
     path = tmp_path / "config.toml"
-    original = b"[camera]\nframe_rate = 41.0\n"
+    original = REPOSITORY_CONFIG.read_bytes()
     path.write_bytes(original)
 
     def fail_replace(*args):
@@ -83,7 +89,7 @@ def test_update_config_failed_replace_leaves_original(tmp_path, monkeypatch):
 
 
 def test_override_preserves_other_fields_and_original():
-    camera = CameraConfig(width=640, height=480, channels="y")
+    camera = camera_config(width=640, height=480, channels="y")
     changed = camera.with_overrides(frame_rate=60.0)
     assert changed.frame_rate == 60.0
     assert changed.width == 640
@@ -94,7 +100,7 @@ def test_override_preserves_other_fields_and_original():
 
 
 def test_root_override_revalidates_section():
-    config = AppConfig()
+    config = load_config()
     changed = config.with_overrides(
         camera=config.camera.with_overrides(frame_rate=30.0)
     )
@@ -132,17 +138,19 @@ def test_root_override_revalidates_section():
 )
 def test_invalid_overrides_rejected(overrides):
     with pytest.raises(ValidationError):
-        CameraConfig().with_overrides(**overrides)
+        camera_config().with_overrides(**overrides)
 
 
 def test_integer_frame_rate():
-    config = CameraConfig().with_overrides(frame_rate=30)
+    config = camera_config().with_overrides(frame_rate=30)
     assert config.frame_rate == 30.0
 
 
 def test_toml_error_identifies_setting(tmp_path):
     path = tmp_path / "config.toml"
-    path.write_text('[camera]\nframe_rate="60"\n')
+    path.write_text(
+        REPOSITORY_CONFIG.read_text().replace("frame_rate = 41.0", 'frame_rate = "60"')
+    )
     with pytest.raises(ValidationError) as error:
         load_config(path)
     assert all(
@@ -151,10 +159,14 @@ def test_toml_error_identifies_setting(tmp_path):
 
 
 def test_unknown_sections_and_unimplemented_settings_rejected():
+    values = load_config().model_dump()
+    values["camrea"] = {}
     with pytest.raises(ValidationError):
-        AppConfig.model_validate({"camrea": {}})
+        AppConfig.model_validate(values)
+    values = load_config().model_dump()
+    values["recording"] = {"unknown": True}
     with pytest.raises(ValidationError):
-        AppConfig.model_validate({"recording": {"unknown": True}})
+        AppConfig.model_validate(values)
 
 
 @pytest.mark.parametrize(
@@ -166,32 +178,30 @@ def test_unknown_sections_and_unimplemented_settings_rejected():
     ],
 )
 def test_invalid_network_settings_rejected(field, value):
-    system = load_config().system.model_dump()
-    system["network"][field] = value
+    values = load_config().model_dump()
+    values["system"]["network"][field] = value
     with pytest.raises(ValidationError):
-        AppConfig.model_validate({"system": system})
+        AppConfig.model_validate(values)
 
 
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("data_directory", "/home/driver/.arduino15"),
-        ("download_directory", "../staging"),
-        ("config_path", ".arduino15/nested/arduino-cli.yaml"),
+        ("address", "bad\naddress"),
         ("sketchbook_directory", "../outside"),
-        ("cli_install_directory", "opt/arduino-cli"),
+        ("sketchbook_directory", "/absolute/path"),
     ],
 )
-def test_invalid_arduino_provisioning_paths_rejected(field, value):
-    config = load_config().arduino.provisioning.model_dump()
-    config[field] = value
+def test_invalid_arduino_settings_rejected(field, value):
+    values = load_config().model_dump()
+    values["arduino"][field] = value
     with pytest.raises(ValidationError):
-        AppConfig.model_validate({"arduino": {"provisioning": config}})
+        AppConfig.model_validate(values)
 
 
 @pytest.mark.parametrize("channels", ["rgb", "y"])
 def test_jpeg_override_preserves_channel_selection(channels):
-    original = CameraConfig(channels=channels)
+    original = camera_config(channels=channels)
     changed = original.with_overrides(file_format="jpeg")
     assert changed.file_format == "jpeg"
     assert changed.channels == channels

@@ -16,6 +16,7 @@ def configure(root, dependencies, mappings=""):
         + ",".join(repr(value) for value in dependencies)
         + "]\n"
         '[tool.drivion.provisioning]\npackages=["python3-picamera2"]\nsystem_imports=["libcamera"]\n'
+        "[tool.drivion.verification]\ncommand_timeout_seconds=5\n"
         "[tool.drivion.verification.imports]\n" + mappings
     )
 
@@ -65,6 +66,7 @@ def test_missing_distribution_wrong_version_and_import_failure(tmp_path):
     ):
         assert verification.verify(tmp_path) == 1
     assert run.call_count == 2  # A failed import does not prevent the system check.
+    assert run.call_args.kwargs["timeout"] == 5
 
 
 def test_successful_verification(tmp_path):

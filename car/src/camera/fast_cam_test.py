@@ -77,7 +77,7 @@ def main() -> None:
     if args.save_frames:
         args.save_frames.mkdir(parents=True, exist_ok=True)
     with Camera(config) as camera:
-        time.sleep(1.0)  # Let automatic exposure and white balance settle.
+        time.sleep(config.warmup_seconds)
         metadata = camera.camera.capture_metadata()
         print("Config:", config)
         print("Applied sensor:", camera.camera.camera_configuration()["sensor"])

@@ -109,14 +109,16 @@ def test_inventory_reads_system_packages_from_pyproject():
 
 def test_inventory_reads_arduino_settings_from_central_config():
     config = run.arduino_settings(run.ROOT / "car")
+    toolchain = run.arduino_toolchain_settings(run.ROOT / "car")
     inventory = run.build_inventory({"PI_HOST": "pi.local", "PI_USER": "driver"})
     host = inventory["all"]["children"]["raspberry_pi"]["hosts"]["car"]
-    assert host["arduino_cli_version"] == config.cli_version
-    assert host["arduino_cli_archive_name"] == config.cli_archive_name
-    assert host["arduino_cli_archive_sha256"] == config.cli_archive_sha256
-    assert host["arduino_avr_core_version"] == config.avr_core_version
+    assert host["arduino_address"] == config.address
+    assert host["arduino_cli_version"] == toolchain.cli_version
+    assert host["arduino_cli_archive_name"] == toolchain.cli_archive_name
+    assert host["arduino_cli_archive_sha256"] == toolchain.cli_archive_sha256
+    assert host["arduino_avr_core_version"] == toolchain.avr_core_version
     assert host["arduino_data_directory"] == str(
-        PurePosixPath("/home/driver") / config.data_directory
+        PurePosixPath("/home/driver") / toolchain.data_directory
     )
     assert host["arduino_sketchbook_directory"] == str(
         PurePosixPath("/home/driver/car") / config.sketchbook_directory
@@ -127,9 +129,7 @@ def test_inventory_reads_uv_settings_from_central_config():
     config = run.uv_settings(run.ROOT / "car")
     inventory = run.build_inventory({"PI_HOST": "pi.local", "PI_USER": "driver"})
     host = inventory["all"]["children"]["raspberry_pi"]["hosts"]["car"]
-    assert host["uv_version"] == config.version
-    assert host["uv_archive_sha256"] == config.archive_sha256
-    assert host["uv_install_directory"] == config.install_directory
+    assert host["uv_installer_url"] == config.installer_url
     assert host["uv_executable_directory"] == config.executable_directory
 
 
@@ -201,3 +201,43 @@ def test_arduino_core_conditions_with_cli_1_5_json(tmp_path):
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_uv_updates_only_after_managed_dry_run_reports_newer_release():
+    import yaml
+
+    tasks = yaml.safe_load((run.ROOT / "dev/ansible/tasks/uv.yml").read_text())
+    check = next(task for task in tasks if task["name"].startswith("Check whether"))
+    assert "--dry-run" in check["ansible.builtin.command"]["argv"]
+    update = next(task for task in tasks if task["name"].startswith("Update uv only"))
+    assert any("Would update uv" in condition for condition in update["when"])
+    assert update["changed_when"] is True
+
+
+def test_wifi_profile_is_modified_only_when_properties_differ():
+    import yaml
+
+    tasks = yaml.safe_load((run.ROOT / "dev/ansible/tasks/network.yml").read_text())
+    inspect = next(
+        task
+        for task in tasks
+        if task["name"] == "Inspect the fallback hotspot settings"
+    )
+    assert inspect["no_log"] is True
+    configure = next(
+        task
+        for task in tasks
+        if task["name"] == "Configure the fallback hotspot profile"
+    )
+    assert any("stdout_lines" in condition for condition in configure["when"])
+    assert configure["no_log"] is True
+
+
+def test_root_services_use_protected_toml_snapshot():
+    templates = run.ROOT / "dev/ansible/templates/network"
+    for name in (
+        "drivion-system-info.service.j2",
+        "drivion-wifi-fallback.service.j2",
+    ):
+        content = (templates / name).read_text()
+        assert "--config-root {{ service_configuration_directory }}" in content

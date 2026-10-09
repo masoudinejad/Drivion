@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """Start the car using the Python environment selected in config.toml."""
 
 import os
@@ -39,6 +39,6 @@ if __name__ == "__main__":
     try:
         enter_environment()
         main()
-    except (OSError, ValueError) as error:
+    except (OSError, TypeError, ValueError) as error:
         print(f"Drivion startup error: {error}", file=sys.stderr)
         sys.exit(1)

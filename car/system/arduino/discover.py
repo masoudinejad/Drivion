@@ -3,11 +3,12 @@
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import tomllib
 
-from ..configuration import arduino_settings
+from ..configuration import arduino_settings, arduino_toolchain_settings
 
 
 def _without_nulls(value):
@@ -21,7 +22,44 @@ def _without_nulls(value):
     return value
 
 
-def discover(car_root):
+def _validate_ports(value):
+    """Validate the documented Arduino CLI board-list structure."""
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError("Arduino CLI detected_ports must be a list of objects")
+    for detected in value:
+        port = detected.get("port")
+        candidates = detected.get("matching_boards", [])
+        if not isinstance(port, dict) or not isinstance(port.get("address"), str):
+            raise TypeError("Every detected Arduino port must have a string address")
+        if not isinstance(candidates, list) or any(
+            not isinstance(candidate, dict) for candidate in candidates
+        ):
+            raise ValueError("Arduino matching_boards must be a list of objects")
+        properties = port.get("properties", {})
+        if not isinstance(properties, dict):
+            raise TypeError("Arduino port properties must be an object")
+        for candidate in candidates:
+            for key in ("name", "fqbn"):
+                if key in candidate and not isinstance(candidate[key], str):
+                    raise ValueError(f"Arduino board {key} must be a string")
+    return value
+
+
+def _select_address(ports, configured):
+    addresses = [detected["port"]["address"] for detected in ports]
+    if configured == "auto":
+        if len(addresses) == 1:
+            return {"status": "selected", "address": addresses[0]}
+        return {
+            "status": "none" if not addresses else "ambiguous",
+            "configured_address": configured,
+        }
+    if addresses.count(configured) == 1:
+        return {"status": "selected", "address": configured}
+    return {"status": "missing", "configured_address": configured}
+
+
+def discover(car_root, config_root=None):
     """Return observed ports, candidate boards, and installed core metadata.
 
     Board details describe a core's available options, not measured processor or
@@ -29,22 +67,20 @@ def discover(car_root):
     adapters remain unidentified. Individual detail failures retain port data.
     """
     car_root = Path(car_root)
-    settings = arduino_settings(car_root)
-    with (car_root / "config.toml").open("rb") as stream:
-        discovery = tomllib.load(stream)["arduino"]["discovery"]
-    wait = discovery["discovery_timeout_seconds"]
-    timeout = discovery["command_timeout_seconds"]
-    if (
-        type(wait) is not int
-        or type(timeout) is not int
-        or not 1 <= wait <= 300
-        or not wait < timeout <= 600
-    ):
-        raise ValueError("Configure valid arduino.discovery timeouts")
+    config_root = Path(config_root) if config_root is not None else car_root
+    runtime = arduino_settings(config_root)
+    toolchain = arduino_toolchain_settings(config_root)
+    wait = toolchain.discovery_timeout_seconds
+    timeout = toolchain.command_timeout_seconds
+    cli_config = (
+        Path(toolchain.service_config_path)
+        if config_root != car_root
+        else car_root.resolve().parent / toolchain.config_path
+    )
     command = [
-        settings.cli_executable_path,
+        toolchain.cli_executable_path,
         "--config-file",
-        str(car_root.resolve().parent / settings.config_path),
+        str(cli_config),
         "--json",
     ]
 
@@ -64,14 +100,13 @@ def discover(car_root):
     errors = (OSError, subprocess.SubprocessError, ValueError, TypeError)
     try:
         listing = query("board", "list", "--discovery-timeout", f"{wait}s")
-        ports = listing.get("detected_ports", [])
-        if not isinstance(ports, list) or any(
-            not isinstance(port, dict) for port in ports
-        ):
-            raise ValueError("Arduino CLI detected_ports must be a list of objects")
+        ports = _validate_ports(listing.get("detected_ports", []))
     except errors as error:
         return {"status": "error", "error": str(error), "ports": []}
-    report = {"status": "ok", "ports": ports}
+    selection = _select_address(ports, runtime.address)
+    report = {"status": "ok", "selection": selection, "ports": ports}
+    if selection["status"] in ("ambiguous", "missing"):
+        report["status"] = "partial"
     try:
         report["cores"] = query("core", "list")
     except errors as error:
@@ -105,7 +140,9 @@ def discover(car_root):
 def compact_report(report):
     """Flatten a single device; retain all entries when multiple ports exist."""
     compact = {
-        key: report[key] for key in ("status", "error", "core_error") if key in report
+        key: report[key]
+        for key in ("status", "error", "core_error", "selection")
+        if key in report
     }
     compact["ports"] = []
     for detected in report.get("ports", []):
@@ -147,6 +184,15 @@ def format_summary(report):
     for key in ("error", "core_error"):
         if report.get(key):
             lines.append(f"Error: {report[key]}")
+    selection = report.get("selection", {})
+    if selection.get("status") == "selected":
+        lines.append(f"Selected address: {selection['address']}")
+    elif selection.get("status") == "ambiguous":
+        lines.append("Address selection: multiple ports; configure arduino.address")
+    elif selection.get("status") == "missing":
+        lines.append(
+            f"Address selection: {selection['configured_address']} is not connected"
+        )
     ports = report.get("ports", [])
     if not ports and report["status"] == "ok":
         lines.append("No connected ports detected.")
@@ -176,19 +222,28 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--car-root", type=Path, required=True)
     parser.add_argument(
+        "--config-root",
+        type=Path,
+        help="Root containing protected config.toml and system/pyproject.toml",
+    )
+    parser.add_argument(
         "--verbose", action="store_true", help="Print the full JSON report"
     )
     args = parser.parse_args(argv)
     # Import here to keep discovery usable by the information collector.
     from ..information.update import INFO_PATH, publish
 
-    path = args.car_root / INFO_PATH
-    sections = tomllib.loads(path.read_text()) if path.exists() else {}
-    report = discover(args.car_root)
-    sections["arduino"] = compact_report(report)
-    publish(path, sections)
-    print(json.dumps(report, indent=2) if args.verbose else format_summary(report))
-    return 0 if sections["arduino"]["status"] == "ok" else 1
+    try:
+        path = args.car_root / INFO_PATH
+        sections = tomllib.loads(path.read_text()) if path.exists() else {}
+        report = discover(args.car_root, args.config_root)
+        sections["arduino"] = compact_report(report)
+        publish(path, sections)
+        print(json.dumps(report, indent=2) if args.verbose else format_summary(report))
+        return 0 if sections["arduino"]["status"] == "ok" else 1
+    except (KeyError, OSError, TypeError, ValueError) as error:
+        print(f"Arduino discovery error: {error}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

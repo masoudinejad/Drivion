@@ -99,6 +99,22 @@
     dest: "{{ arduino_config_path }}"
     mode: "0644"
 
+- name: Create the protected Arduino configuration directory
+  ansible.builtin.file:
+    path: "{{ arduino_service_config_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Arduino CLI for protected discovery
+  ansible.builtin.template:
+    src: arduino/arduino-cli.yaml.j2
+    dest: "{{ arduino_service_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Preview Arduino AVR core installation
   ansible.builtin.debug:
     msg: >-

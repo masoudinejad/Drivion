@@ -9,9 +9,9 @@
   ansible.builtin.assert:
     that:
       - ansible_facts.architecture == 'aarch64'
-    fail_msg: This pinned uv release supports ARM64 Raspberry Pi OS only.
+    fail_msg: The Drivion runtime supports ARM64 Raspberry Pi OS only.
 
-- name: Inspect the currently installed uv version
+- name: Inspect the installed uv version
   become: false
   ansible.builtin.command:
     argv:
@@ -22,59 +22,93 @@
   failed_when: false
   check_mode: false
 
-- name: Preview uv installation
+- name: Check whether managed uv has a newer release
+  ansible.builtin.command:
+    argv:
+      - "{{ uv_executable_directory }}/uv"
+      - self
+      - update
+      - --dry-run
+      - --no-progress
+      - --color
+      - never
+  environment:
+    UV_NO_MODIFY_PATH: "1"
+  register: uv_update_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: current_uv.rc == 0
+
+- name: Preview uv installation or update
   ansible.builtin.debug:
     msg: >-
-      Install uv {{ uv_version }} and uvx into {{ uv_executable_directory }}
-      from the checksum-verified official ARM64 archive.
-  changed_when: current_uv.rc != 0 or current_uv.stdout.split()[:2] != ['uv', uv_version]
+      {{
+        'Install the latest uv release with the official managed installer.'
+        if current_uv.rc != 0 or uv_update_check.rc | default(1) != 0
+        else uv_update_check.stderr | trim
+      }}
+  changed_when: >-
+    current_uv.rc != 0 or
+    uv_update_check.rc | default(1) != 0 or
+    'Would update uv' in uv_update_check.stderr | default('')
   when: ansible_check_mode
 
-- name: Install the pinned uv release
-  when: not ansible_check_mode
+- name: Install uv with the official managed installer
+  when:
+    - not ansible_check_mode
+    - current_uv.rc != 0 or uv_update_check.rc | default(1) != 0
   block:
-    - name: Create the versioned uv directory
-      ansible.builtin.file:
-        path: "{{ uv_install_directory }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
+    - name: Create a temporary uv installer file
+      ansible.builtin.tempfile:
+        state: file
+        suffix: -uv-installer.sh
+      register: uv_installer
 
-    - name: Download the official uv archive and verify its pinned checksum
+    - name: Download the official uv installer
       ansible.builtin.get_url:
-        url: "{{ uv_release_url }}/{{ uv_archive_name }}.tar.gz"
-        dest: "{{ uv_install_directory }}/uv.tar.gz"
-        checksum: "sha256:{{ uv_archive_sha256 }}"
-        owner: root
-        group: root
-        mode: "0644"
-
-    - name: Extract the verified uv archive
-      ansible.builtin.unarchive:
-        src: "{{ uv_install_directory }}/uv.tar.gz"
-        dest: "{{ uv_install_directory }}"
-        remote_src: true
-        creates: "{{ uv_install_directory }}/{{ uv_archive_name }}/uv"
-
-    - name: Install uv and uvx for all users
-      ansible.builtin.copy:
-        src: "{{ uv_install_directory }}/{{ uv_archive_name }}/{{ item }}"
-        dest: "{{ uv_executable_directory }}/{{ item }}"
-        remote_src: true
-        owner: root
-        group: root
+        url: "{{ uv_installer_url }}"
+        dest: "{{ uv_installer.path }}"
         mode: "0755"
-      loop:
-        - uv
-        - uvx
 
-    - name: Verify uv is usable by the car user
-      become: false
+    - name: Install the latest managed uv release
       ansible.builtin.command:
         argv:
-          - "{{ uv_executable_directory }}/uv"
-          - --version
-      register: installed_uv
-      changed_when: false
-      failed_when: installed_uv.rc != 0 or installed_uv.stdout.split()[:2] != ['uv', uv_version]
+          - "{{ uv_installer.path }}"
+      environment:
+        UV_INSTALL_DIR: "{{ uv_executable_directory }}"
+        UV_NO_MODIFY_PATH: "1"
+      changed_when: true
+  always:
+    - name: Remove the temporary uv installer
+      ansible.builtin.file:
+        path: "{{ uv_installer.path | default('') }}"
+        state: absent
+      when: uv_installer.path | default('') | length > 0
+
+- name: Update uv only when a newer release exists
+  ansible.builtin.command:
+    argv:
+      - "{{ uv_executable_directory }}/uv"
+      - self
+      - update
+      - --no-progress
+      - --color
+      - never
+  environment:
+    UV_NO_MODIFY_PATH: "1"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - current_uv.rc == 0
+    - uv_update_check.rc == 0
+    - "'Would update uv' in uv_update_check.stderr"
+
+- name: Verify uv is available
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ uv_executable_directory }}/uv"
+      - --version
+  changed_when: false
+  when: not ansible_check_mode

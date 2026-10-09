@@ -38,8 +38,10 @@ uv run --project dev python dev/ansible/run.py
 Ansible syncs the car code and creates `system/env/drivion` under the deployed
 car folder, using `/usr/bin/python3` and `--system-site-packages` for Picamera2.
 The environment name and relative path are defined in `car/config.toml` under
-`system.python_environment`. Dependencies and their lockfile live in
-`car/system/`. The supported target is 64-bit Raspberry Pi OS with Python 3.13.
+`system.python_environment`. Runtime choices live in `car/config.toml`, while
+provisioning metadata lives under `tool.drivion` in `car/system/pyproject.toml`.
+Dependencies and their lockfile live in `car/system/`. The supported target is
+64-bit Raspberry Pi OS with Python 3.13.
 NumPy matches the OS camera stack; torch and torchvision use the CPU wheel index.
 
 On the Pi, run `~/car/drive.py` from any directory. The system-Python shebang

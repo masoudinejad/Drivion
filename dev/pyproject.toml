@@ -16,3 +16,25 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[tool.drivion.sync]
+ssh_connect_timeout_seconds = 10
+rsync_excludes = [
+    ".venv/",
+    "__pycache__/",
+    "*.pyc",
+    ".env",
+    ".env.*",
+    ".git/",
+    ".pytest_cache/",
+    ".ruff_cache/",
+    ".ssh/",
+    "/system/info.toml",
+    "/system/version.toml",
+    "/system/env/",
+]
+
+[tool.drivion.quality]
+python_extensions = [".py", ".pyi"]
+markdown_extensions = [".md"]
+cpp_extensions = [".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ino"]

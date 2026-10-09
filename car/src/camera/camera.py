@@ -9,7 +9,7 @@ from typing import Self
 
 import numpy as np
 
-from car.src.camera.config import CameraConfig
+from car.src.configuration.schema import CameraConfig
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def save_frame(frame: np.ndarray, path: str | Path, config: CameraConfig) -> Pat
     else:
         from PIL import Image
 
-        Image.fromarray(frame).save(path, format="JPEG", quality=95)
+        Image.fromarray(frame).save(path, format="JPEG", quality=config.jpeg_quality)
     return path
 
 
@@ -113,7 +113,7 @@ class Camera:
             sensor={"output_size": (cfg.sensor_width, cfg.sensor_height)},
             raw=None,
             controls={"AeEnable": True, "FrameDurationLimits": (duration, duration)},
-            buffer_count=4,
+            buffer_count=cfg.buffer_count,
             queue=False,
         )
         self.camera.configure(capture_config)

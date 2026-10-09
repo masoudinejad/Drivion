@@ -12,26 +12,55 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+import tomllib
+
 if __package__:
     from . import versioning
 else:
     import versioning
 TOOLS_DIR = Path(__file__).resolve().parent
 CAR_DIR = TOOLS_DIR.parents[1] / "car"
-EXCLUDES = (
-    ".venv/",
-    "__pycache__/",
-    "*.pyc",
-    ".env",
-    ".env.*",
-    ".git/",
-    ".pytest_cache/",
-    ".ruff_cache/",
-    ".ssh/",
-    "/system/info.toml",
-    "/system/version.toml",
-    "/system/env/",
-)
+
+
+def tool_settings():
+    """Read and validate non-secret sync behavior from dev/pyproject.toml."""
+    with (TOOLS_DIR.parent / "pyproject.toml").open("rb") as stream:
+        values = tomllib.load(stream)["tool"]["drivion"]["sync"]
+    if set(values) != {"ssh_connect_timeout_seconds", "rsync_excludes"}:
+        raise ValueError("Configure exactly the supported tool.drivion.sync settings")
+    timeout = values["ssh_connect_timeout_seconds"]
+    excludes = values["rsync_excludes"]
+    if type(timeout) is not int or not 1 <= timeout <= 300:
+        raise ValueError("Configure a sync SSH timeout between 1 and 300 seconds")
+    if not isinstance(excludes, list) or any(
+        not isinstance(pattern, str) or not pattern for pattern in excludes
+    ):
+        raise TypeError("Configure sync exclusions as non-empty strings")
+    return timeout, tuple(excludes)
+
+
+SSH_CONNECT_TIMEOUT_SECONDS, EXCLUDES = tool_settings()
+
+
+def car_service_python():
+    """Read the configured target system Python from car project metadata."""
+    with (CAR_DIR / "system/pyproject.toml").open("rb") as stream:
+        value = (
+            tomllib.load(stream)
+            .get("tool", {})
+            .get("drivion", {})
+            .get("services", {})
+            .get("python_executable")
+        )
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or "\\" in value
+        or ".." in Path(value).parts
+        or any(character.isspace() for character in value)
+    ):
+        raise ValueError("Configure a safe service Python executable path")
+    return value
 
 
 def read_settings(path):
@@ -68,7 +97,11 @@ def build_command(settings, dry_run=False, password=False, source=None):
     if destination != f"/home/{user}/car":
         raise ValueError("PI_CAR_PATH must be /home/<PI_USER>/car")
     # The path and username are validated because SSH runs remote commands via a shell.
-    ssh = "ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1"
+    ssh = (
+        "ssh -o StrictHostKeyChecking=accept-new "
+        f"-o ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS} "
+        "-o NumberOfPasswordPrompts=1"
+    )
     if settings.get("SSH_AUTH_SOCK"):
         ssh += " -o IdentityAgent=SSH_AUTH_SOCK"
     if settings.get("PI_SSH_PUBLIC_KEY") and not password:
@@ -111,7 +144,8 @@ def sync_versioned(settings, environment, dry_run=False, password=False):
         ssh.extend(
             [
                 f"{settings['PI_USER']}@{settings['PI_HOST']}",
-                "python3 -c "
+                shlex.quote(car_service_python())
+                + " -c "
                 + shlex.quote(versioning.PUBLISH_SCRIPT)
                 + " "
                 + shlex.quote(destination),
@@ -156,7 +190,7 @@ def build_key_command(settings, public_key=None):
         "-o",
         "StrictHostKeyChecking=accept-new",
         "-o",
-        "ConnectTimeout=10",
+        f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS}",
     ]
     public_key = public_key or settings.get("PI_SSH_PUBLIC_KEY")
     if public_key:

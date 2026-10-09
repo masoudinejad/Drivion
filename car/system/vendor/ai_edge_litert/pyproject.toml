@@ -3,6 +3,12 @@ requires = []
 build-backend = "backend"
 backend-path = ["."]
 
+[tool.drivion.upstream-wheel]
+filename = "ai_edge_litert-2.3.0-cp313-cp313-manylinux_2_27_aarch64.whl"
+url = "https://files.pythonhosted.org/packages/b2/ad/234674ab4781ff1822c26794488b5640512bc61011a6b3490bfecdc46aa1/ai_edge_litert-2.3.0-cp313-cp313-manylinux_2_27_aarch64.whl"
+sha256 = "2ab71e4f5dfa65b3882634b42755f455f3e7415630d720200bd792733e15e257"
+download_timeout_seconds = 120
+
 [project]
 name = "ai-edge-litert"
 version = "2.3.0"

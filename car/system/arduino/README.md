@@ -26,10 +26,15 @@ identification, matching boards, address, protocol, serialNumber, VID, and PID
 when provided. Multiple ports retain separate `[[arduino.ports]]` entries so
 no device is discarded. An empty serialNumber means USB provided no serial.
 
-CLI paths come from `arduino.provisioning` and execution/discovery timeouts from
-`arduino.discovery` in `config.toml`. The deployed car directory's parent anchors
-the home-relative CLI configuration path, including during the boot service.
-No firmware is uploaded or compiled.
+Only `address` and `sketchbook_directory` are user settings under `arduino` in
+`config.toml`. Set `address = "auto"` when exactly one serial port will be present;
+with multiple ports, configure the exact address reported by discovery. Discovery
+never guesses a board, selects among multiple ports, or rewrites configuration.
+
+Pinned CLI/core metadata, protected paths, and execution timeouts live under
+`tool.drivion.arduino` in `system/pyproject.toml`. Interactive discovery uses the
+car user's Arduino CLI configuration; the root boot service uses the protected
+copy installed by Ansible. No firmware is uploaded or compiled.
 
 The verbose report retains all CLI port properties (including USB VID/PID and serial
 number when provided), every candidate name/FQBN, installed core metadata, and

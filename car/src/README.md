@@ -6,13 +6,13 @@ environment managed in `../system/`.
 
 ## Configuration
 
-`config.py` loads the central `car/config.toml` into a Pydantic `AppConfig`.
-Models reject unknown keys, invalid types and invalid values. Missing application
-sections use model defaults; a supplied system section requires its complete
-environment, network, and provisioning settings. Empty sections reserve future
-schemas and reject settings until their models are defined. System provisioning
-tools use a standard-library loader so they can run before application
-dependencies are installed.
+`config.py` loads the central `car/config.toml` into the single Pydantic schema
+defined in `configuration/schema.py`. Models reject unknown keys, invalid types,
+and invalid values. Camera and Arduino settings are required so configurable
+values never fall back to copies embedded in Python. Empty future sections use
+empty models and reject settings until their schemas are defined. Bootstrap and
+boot tools use narrow standard-library readers because they must run before the
+application dependencies are installed.
 
 Pass each component its own section. Use `with_overrides` to create a validated
 copy while retaining other settings and leaving the original unchanged:
@@ -60,16 +60,20 @@ dependencies and is not available during initial provisioning.
 ### Camera settings
 
 - `width` and `height`: positive even output dimensions (compatible with YUV420).
-  Defaults are 640 × 480; output dimensions are separate from sensor resolution.
+  Output dimensions are separate from sensor resolution.
 - `channels`: `"rgb"` for an H × W × 3 RGB array, or `"y"` for an H × W
   luminance array. Both use uint8 values.
-- `file_format`: `"numpy"` (default) for lossless `.npy` arrays, or `"jpeg"` for
+- `file_format`: `"numpy"` for lossless `.npy` arrays, or `"jpeg"` for
   lossy `.jpg` images. JPEG with `channels="y"` saves a grayscale image.
-- `sensor_width`, `sensor_height`: explicit sensor dimensions. Defaults are
-  1640 × 1232 for Camera v2 full FOV. Sensor bit depth uses the system default.
+- `sensor_width`, `sensor_height`: explicit sensor dimensions. The central TOML
+  currently selects 1640 × 1232 for Camera v2 full FOV. Sensor bit depth uses
+  the system default.
   Hardware discovery tools can supply other values; loading config does no discovery.
-- `frame_rate`: a positive finite numeric rate, defaulting to 41 FPS.
-  The capture implementation will apply these explicit settings.
+- `frame_rate`: a positive finite numeric rate. The central TOML currently
+  selects 41 FPS, and capture applies it explicitly.
+- `jpeg_quality`: JPEG encoder quality from 1 through 100.
+- `buffer_count`: Picamera2 capture buffer count from 1 through 32.
+- `warmup_seconds`: bounded automatic-exposure warmup used by the benchmark.
 
 Capture always enables automatic exposure. Exposure, sensor bit depth, device
 index and orientation are not configurable. The initial camera implementation

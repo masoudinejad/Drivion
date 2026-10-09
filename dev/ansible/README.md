@@ -63,10 +63,13 @@ System camera imports are declared in the same file under
 `tool.drivion.provisioning.system_imports` and verified
 inside the configured environment with access to system packages.
 
-It installs uv and uvx using the pinned official ARM64 archive and SHA-256
-checksum configured under `system.provisioning.uv` in `car/config.toml`.
-Installation does not change shell profiles or download a separate Python
-interpreter. The Pi must use a 64-bit ARM OS.
+It installs uv and uvx through uv's official standalone installer. Existing
+archive-style installations are migrated once so managed self-updates are
+available. Later runs use `uv self update --dry-run` and update only when a newer
+stable release exists; an up-to-date installation is unchanged. The installer
+URL and executable directory live under `tool.drivion.uv` in
+`car/system/pyproject.toml`. Installation does not change shell profiles or
+download a separate Python interpreter. The Pi must use a 64-bit ARM OS.
 
 Arduino provisioning runs automatically during every normal setup run. To
 install or repair only Arduino tooling without running the package upgrades,
@@ -84,9 +87,10 @@ It also installs the configured Arduino CLI ARM64 release, grants the car user
 the configured serial-device group, and installs the configured AVR core. Each
 sketch should be placed in its own folder under the configured sketchbook. A new
 login is required before an existing shell gains the new group membership.
-Versions, checksums, URLs, groups, core identifiers, and Arduino paths are
-defined only in `car/config.toml` under `arduino.provisioning`; the runner
-validates and passes them to Ansible.
+The sketchbook and selected device address are the only Arduino settings in
+`car/config.toml`. Versions, checksums, URLs, groups, core identifiers, protected
+paths, and timeouts are provisioning metadata under `tool.drivion.arduino` in
+`car/system/pyproject.toml`; the runner validates and passes them to Ansible.
 
 It then syncs the car folder and creates the configured environment, currently
 `~/car/system/env/drivion`, from OS Python with system package access. Build
@@ -104,6 +108,11 @@ replaced by underscores. Only exceptions belong in
 `opencv-python-headless = "cv2"`. Stale mappings fail validation. Dependencies
 with inactive Python/platform markers are skipped. Ansible contains no repeated
 Python package or import list.
+
+System paths, apt lock timing, uv concurrency, and numerical-library thread
+limits are also declared under `tool.drivion` in `car/system/pyproject.toml`.
+Ansible consumes validated inventory values instead of embedding those settings
+in tasks.
 
 Change the environment name and matching relative path in `car/config.toml`.
 Sync excludes `system/env/`, preserving the installed environment on the Pi.

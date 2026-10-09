@@ -8,6 +8,9 @@ Raspberry Pi maintenance automation lives in `ansible/`. See the
 existing local connection settings.
 
 Development and debugging utilities live here, with independent uv dependencies.
+Non-secret tool behavior, including sync exclusions, SSH timeouts, and formatted
+file extensions, is configured under `tool.drivion` in `dev/pyproject.toml`.
+Machine addresses and secrets remain in the ignored `sync/.env` file.
 
 ## Sync the car code to a Raspberry Pi
 

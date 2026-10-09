@@ -6,5 +6,5 @@ Requires=drivion-system-info.service
 
 [Service]
 Type=oneshot
-Environment=PYTHONPATH=/usr/local/lib/drivion
-ExecStart=/usr/bin/python3 -m system.network.fallback --car-root {{ car_root }}
+Environment=PYTHONPATH={{ service_library_directory }}
+ExecStart={{ service_python_executable }} -m system.network.fallback --car-root {{ car_root }} --config-root {{ service_configuration_directory }}

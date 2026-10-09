@@ -5,8 +5,8 @@ Wants=NetworkManager.service
 
 [Service]
 Type=oneshot
-Environment=PYTHONPATH=/usr/local/lib/drivion
-ExecStart=/usr/bin/python3 -m system.information.update --car-root {{ car_root }} --update-hotspot
+Environment=PYTHONPATH={{ service_library_directory }}
+ExecStart={{ service_python_executable }} -m system.information.update --car-root {{ car_root }} --config-root {{ service_configuration_directory }} --update-hotspot
 
 [Install]
 WantedBy=multi-user.target

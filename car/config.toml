@@ -5,6 +5,7 @@ name = "drivion"
 path = "system/env/drivion"
 
 [system.network]
+command_path = "/usr/bin/nmcli"
 wifi_interface = "wlan0"
 fallback_profile = "drivion-hotspot"
 fallback_ssid_prefix = "Drivion"
@@ -13,36 +14,12 @@ fallback_ipv4_address = "10.42.0.1"
 fallback_ipv4_prefix_length = 24
 fallback_delay_seconds = 60
 fallback_timer_accuracy_seconds = 1
-
-[system.provisioning.uv]
-version = "0.12.20"
-archive_name = "uv-aarch64-unknown-linux-gnu"
-archive_sha256 = "8a7aad7bc76a2fae5151566ff3e43eacce0b2a113d5e4de3e4afe3e58fa2441e"
-release_url = "https://github.com/astral-sh/uv/releases/download/0.12.20"
-install_directory = "/opt/drivion/uv/0.12.20"
-executable_directory = "/usr/local/bin"
-
-[arduino.discovery]
-discovery_timeout_seconds = 3
 command_timeout_seconds = 30
 
-[arduino.provisioning]
-cli_version = "1.5.1"
-cli_archive_name = "arduino-cli_1.5.1_Linux_ARM64"
-cli_archive_sha256 = "1e69e077479f300614d4551334e0a33f08ee40b04315d83b8e7e0e94f0d0ee62"
-cli_release_url = "https://github.com/arduino/arduino-cli/releases/download/v1.5.1"
-cli_install_directory = "/opt/drivion/arduino-cli/1.5.1"
-cli_archive_executable = "arduino-cli"
-cli_executable_path = "/usr/local/bin/arduino-cli"
-# These paths are relative to the Raspberry Pi user's home directory.
-data_directory = ".arduino15"
-download_directory = ".arduino15/staging"
-config_path = ".arduino15/arduino-cli.yaml"
-# This path is relative to the deployed car directory.
+[arduino]
+# Use "auto" only when exactly one port is expected to be connected.
+address = "auto"
 sketchbook_directory = "system/arduino/code"
-serial_group = "dialout"
-avr_core = "arduino:avr"
-avr_core_version = "1.8.6"
 
 [camera]
 # Automatic exposure is always enabled; sensor bit depth uses system defaults.
@@ -55,3 +32,6 @@ file_format = "numpy" # "numpy" (.npy) or "jpeg" (.jpg)
 sensor_width = 1640
 sensor_height = 1232
 frame_rate = 41.0 # Frames per second
+jpeg_quality = 95
+buffer_count = 4
+warmup_seconds = 1.0

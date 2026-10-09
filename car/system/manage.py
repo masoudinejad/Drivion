@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """Open the central setup, settings, and administration menu."""
 
 import sys

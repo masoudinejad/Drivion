@@ -16,7 +16,14 @@ ROOT = Path(__file__).resolve().parents[2]
 if not __package__:
     sys.path.insert(0, str(ROOT))
 
-from car.system.configuration import arduino_settings, network_settings, uv_settings
+from car.system.configuration import (
+    arduino_settings,
+    arduino_toolchain_settings,
+    execution_settings,
+    network_settings,
+    service_settings,
+    uv_settings,
+)
 from car.system.environment import environment_path
 from car.system.provisioning import system_settings
 from dev.sync import sync_car
@@ -43,6 +50,15 @@ def build_inventory(settings):
     network = network_settings(ROOT / "car")
     uv = uv_settings(ROOT / "car")
     arduino = arduino_settings(ROOT / "car")
+    arduino_toolchain = arduino_toolchain_settings(ROOT / "car")
+    services = service_settings(ROOT / "car")
+    execution = execution_settings(ROOT / "car")
+    if PurePosixPath(arduino_toolchain.service_config_path).parent != PurePosixPath(
+        services.configuration_directory
+    ):
+        raise ValueError(
+            "Arduino service_config_path must be inside the service configuration directory"
+        )
     packages, _ = system_settings(ROOT / "car")
     car_root = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
     car_home = f"/home/{settings['PI_USER']}"
@@ -55,36 +71,51 @@ def build_inventory(settings):
                             "ansible_host": settings["PI_HOST"],
                             "ansible_user": settings["PI_USER"],
                             "ansible_connection": "ssh",
-                            "ansible_python_interpreter": "/usr/bin/python3",
+                            "ansible_python_interpreter": services.python_executable,
                             "ansible_ssh_common_args": shlex.join(ssh[1:]),
                             "car_root": car_root,
                             "system_packages": packages,
                             "car_environment_name": relative_environment.name,
                             "car_environment_path": f"{car_root}/{relative_environment}",
-                            "arduino_cli_version": arduino.cli_version,
-                            "arduino_cli_archive_name": arduino.cli_archive_name,
-                            "arduino_cli_archive_sha256": arduino.cli_archive_sha256,
-                            "arduino_cli_release_url": arduino.cli_release_url,
-                            "arduino_cli_install_directory": arduino.cli_install_directory,
-                            "arduino_cli_archive_executable": arduino.cli_archive_executable,
-                            "arduino_cli_executable_path": arduino.cli_executable_path,
+                            "arduino_address": arduino.address,
+                            "arduino_cli_version": arduino_toolchain.cli_version,
+                            "arduino_cli_archive_name": arduino_toolchain.cli_archive_name,
+                            "arduino_cli_archive_sha256": arduino_toolchain.cli_archive_sha256,
+                            "arduino_cli_release_url": arduino_toolchain.cli_release_url,
+                            "arduino_cli_install_directory": (
+                                arduino_toolchain.cli_install_directory
+                            ),
+                            "arduino_cli_archive_executable": (
+                                arduino_toolchain.cli_archive_executable
+                            ),
+                            "arduino_cli_executable_path": (
+                                arduino_toolchain.cli_executable_path
+                            ),
                             "arduino_data_directory": str(
-                                PurePosixPath(car_home) / arduino.data_directory
+                                PurePosixPath(car_home)
+                                / arduino_toolchain.data_directory
                             ),
                             "arduino_download_directory": str(
-                                PurePosixPath(car_home) / arduino.download_directory
+                                PurePosixPath(car_home)
+                                / arduino_toolchain.download_directory
                             ),
                             "arduino_config_path": str(
-                                PurePosixPath(car_home) / arduino.config_path
+                                PurePosixPath(car_home) / arduino_toolchain.config_path
+                            ),
+                            "arduino_service_config_path": (
+                                arduino_toolchain.service_config_path
                             ),
                             "arduino_sketchbook_directory": str(
                                 PurePosixPath(car_root) / arduino.sketchbook_directory
                             ),
-                            "arduino_serial_group": arduino.serial_group,
-                            "arduino_avr_core": arduino.avr_core,
-                            "arduino_avr_core_version": arduino.avr_core_version,
+                            "arduino_serial_group": arduino_toolchain.serial_group,
+                            "arduino_avr_core": arduino_toolchain.avr_core,
+                            "arduino_avr_core_version": (
+                                arduino_toolchain.avr_core_version
+                            ),
                             "controller_root": str(ROOT),
                             "controller_python": sys.executable,
+                            "wifi_command_path": network.command_path,
                             "wifi_interface": network.wifi_interface,
                             "wifi_fallback_profile": network.fallback_profile,
                             "wifi_fallback_ssid_prefix": network.fallback_ssid_prefix,
@@ -93,11 +124,22 @@ def build_inventory(settings):
                             "wifi_fallback_timer_accuracy_seconds": (
                                 network.fallback_timer_accuracy_seconds
                             ),
-                            "uv_version": uv.version,
-                            "uv_archive_name": uv.archive_name,
-                            "uv_archive_sha256": uv.archive_sha256,
-                            "uv_release_url": uv.release_url,
-                            "uv_install_directory": uv.install_directory,
+                            "service_python_executable": services.python_executable,
+                            "service_library_directory": services.library_directory,
+                            "service_configuration_directory": (
+                                services.configuration_directory
+                            ),
+                            "systemd_unit_directory": services.unit_directory,
+                            "reboot_required_path": services.reboot_required_path,
+                            "temporary_directory": services.temporary_directory,
+                            "apt_lock_timeout_seconds": (
+                                execution.apt_lock_timeout_seconds
+                            ),
+                            "uv_concurrent_downloads": execution.uv_concurrent_downloads,
+                            "uv_concurrent_builds": execution.uv_concurrent_builds,
+                            "uv_concurrent_installs": execution.uv_concurrent_installs,
+                            "numerical_thread_limit": execution.numerical_thread_limit,
+                            "uv_installer_url": uv.installer_url,
                             "uv_executable_directory": uv.executable_directory,
                         }
                     }
@@ -161,7 +203,7 @@ def main(argv=None):
             return subprocess.run(
                 command, env=environment, cwd=ROOT, check=False
             ).returncode
-    except (OSError, ValueError) as error:
+    except (OSError, TypeError, ValueError) as error:
         print(f"Ansible setup error: {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

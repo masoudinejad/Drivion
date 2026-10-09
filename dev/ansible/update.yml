@@ -6,7 +6,7 @@
     - name: Refresh the apt package index
       ansible.builtin.apt:
         update_cache: true
-        lock_timeout: 120
+        lock_timeout: "{{ apt_lock_timeout_seconds }}"
         auto_install_module_deps: false
 
     - name: Upgrade installed packages
@@ -14,7 +14,7 @@
         upgrade: safe
         force_apt_get: true
         fail_on_autoremove: true
-        lock_timeout: 120
+        lock_timeout: "{{ apt_lock_timeout_seconds }}"
         auto_install_module_deps: false
 
     - name: Install system packages
@@ -35,7 +35,7 @@
 
     - name: Check the reboot-required marker
       ansible.builtin.stat:
-        path: /var/run/reboot-required
+        path: "{{ reboot_required_path }}"
       register: reboot_marker
 
     - name: Report reboot status

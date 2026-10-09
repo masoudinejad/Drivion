@@ -43,6 +43,9 @@ name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
+[tool.drivion.verification]
+command_timeout_seconds = 180
+
 [tool.drivion.verification.imports]
 opencv-python-headless = "cv2"
 scikit-learn = "sklearn"
@@ -50,6 +53,44 @@ xgboost-cpu = "xgboost"
 pyserial = "serial"
 python-dotenv = "dotenv"
 ai-edge-litert = "ai_edge_litert.interpreter"
+
+[tool.drivion.uv]
+installer_url = "https://astral.sh/uv/install.sh"
+executable_directory = "/usr/local/bin"
+
+[tool.drivion.arduino]
+cli_version = "1.5.1"
+cli_archive_name = "arduino-cli_1.5.1_Linux_ARM64"
+cli_archive_sha256 = "1e69e077479f300614d4551334e0a33f08ee40b04315d83b8e7e0e94f0d0ee62"
+cli_release_url = "https://github.com/arduino/arduino-cli/releases/download/v1.5.1"
+cli_install_directory = "/opt/drivion/arduino-cli/1.5.1"
+cli_archive_executable = "arduino-cli"
+cli_executable_path = "/usr/local/bin/arduino-cli"
+# These paths are relative to the Raspberry Pi user's home directory.
+data_directory = ".arduino15"
+download_directory = ".arduino15/staging"
+config_path = ".arduino15/arduino-cli.yaml"
+service_config_path = "/etc/drivion/arduino-cli.yaml"
+serial_group = "dialout"
+avr_core = "arduino:avr"
+avr_core_version = "1.8.6"
+discovery_timeout_seconds = 3
+command_timeout_seconds = 30
+
+[tool.drivion.services]
+python_executable = "/usr/bin/python3"
+library_directory = "/usr/local/lib/drivion"
+configuration_directory = "/etc/drivion"
+unit_directory = "/etc/systemd/system"
+reboot_required_path = "/var/run/reboot-required"
+temporary_directory = "/tmp"
+
+[tool.drivion.execution]
+apt_lock_timeout_seconds = 120
+uv_concurrent_downloads = 2
+uv_concurrent_builds = 1
+uv_concurrent_installs = 1
+numerical_thread_limit = 1
 
 [tool.drivion.provisioning]
 packages = [
