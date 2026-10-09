@@ -19,6 +19,14 @@ def load_theme(styled=True):
     return {name: f"\033[{styles[name]}m" if styled else "" for name in STYLE_NAMES}
 
 
+def menu_descriptions(title, labels):
+    """Return optional descriptions from the shared UI TOML configuration."""
+    with Path(__file__).with_suffix(".toml").open("rb") as source:
+        menus = tomllib.load(source).get("menus", {})
+    descriptions = menus.get(title, {})
+    return [descriptions.get(label, "") for label in labels]
+
+
 if __name__ == "__main__":
     # Only validated numeric codes cross the Python/Bash boundary.
     theme = load_theme()

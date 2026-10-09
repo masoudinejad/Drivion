@@ -5,14 +5,25 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/theme.sh"
 
 drivion_menu() (
     local title="Select an option" option key sequence saved_state=""
+    local description frame line label_width gap footer footer_lines
+    local description_count=0
     local selected=0 first=0 count rows columns visible index last label
     local owns_screen=0
     local cyan amber red green gray bold dim reset
-    local -a options=()
+    local -a options=() descriptions=()
     drivion_load_theme || return 2
 
     while (( $# )); do
         case "$1" in
+            --description)
+                if (( $# < 2 )); then
+                    printf 'menu.sh: --description requires a value\n' >&2
+                    return 2
+                fi
+                descriptions+=("$2")
+                description_count=$(( description_count + 1 ))
+                shift 2
+                ;;
             --title)
                 if (( $# < 2 )); then
                     printf '%s\n' 'menu.sh: --title requires a value' >&2
@@ -27,7 +38,7 @@ drivion_menu() (
                 break
                 ;;
             --help|-h)
-                printf '%s\n' 'Usage: menu.sh [--title TITLE] [--] OPTION...' \
+                printf '%s\n' 'Usage: menu.sh [--title TITLE] [--description TEXT ...] [--] OPTION...' \
                     'Returns an option number (1-based), or 0 for Back.' \
                     'Keys: Up/Down, Enter, Escape for Back; Ctrl-C cancels.'
                 return 0
@@ -39,12 +50,16 @@ drivion_menu() (
         esac
     done
 
-    for option in "$title" "${options[@]}"; do
+    for option in "$title" "${options[@]}" "${descriptions[@]-}"; do
         if [[ $option == *[[:cntrl:]]* ]]; then
             printf '%s\n' 'menu.sh: labels must not contain control characters' >&2
             return 2
         fi
     done
+    if (( description_count != 0 && description_count != ${#options[@]} )); then
+        printf 'menu.sh: provide one description per option\n' >&2
+        return 2
+    fi
     if [[ ${TERM:-dumb} == dumb ]]; then
         printf '%s\n' 'menu.sh: an interactive ANSI terminal is required' >&2
         return 2
@@ -71,13 +86,27 @@ drivion_menu() (
     fi
     printf '\033[?25l' >&3
     count=${#options[@]}
+    label_width=0
+    for option in "${options[@]}"; do
+        if (( ${#option} > label_width )); then label_width=${#option}; fi
+    done
+    # Build a complete frame before writing it, avoiding a visible blank screen.
+    append_line() {
+        printf -v line '\r\033[2K%s\n' "$1"
+        frame+=$line
+    }
 
     while :; do
         read -r rows columns < <(stty size <&3)
         rows=${rows:-24}
         columns=${columns:-80}
         (( columns < 10 )) && columns=10
-        visible=$(( rows - 8 ))
+        footer='[↑/↓] Move    [Enter] Select    [Esc] Back'
+        footer_lines=1
+        if (( ${#footer} > columns - 4 )); then
+            footer_lines=3
+        fi
+        visible=$(( rows - 7 - footer_lines ))
         (( visible < 1 )) && visible=1
         if (( selected < count )); then
             (( selected < first )) && first=$selected
@@ -85,21 +114,42 @@ drivion_menu() (
         fi
         last=$(( first + visible ))
         (( last > count )) && last=$count
-        printf '\033[H\033[2J\n  %s%s%s\n\n' "$bold" "${title:0:columns-4}" "$reset" >&3
+        frame=""
+        append_line ""
+        append_line "  ${bold}${title:0:columns-4}${reset}"
+        append_line ""
         for (( index=first; index<last; index++ )); do
             label=${options[index]:0:columns-6}
             if (( selected == index )); then
-                printf '  %s▸ %s%s\n' "$cyan" "$label" "$reset" >&3
+                append_line "  ${cyan}● ${bold}${label}${reset}"
             else
-                printf '    %s\n' "$label" >&3
+                append_line "  ${gray}○${reset} ${label}"
+            fi
+            description=${descriptions[index]:-}
+            # Append muted descriptions on the same row only when they fit.
+            gap=$(( label_width - ${#label} + 2 ))
+            if [[ -n $description ]] && (( label_width + 8 + ${#description} <= columns )); then
+                # Replace the newline of the last row, retaining its erase prefix.
+                frame=${frame%$'\n'}
+                printf -v line '%*s%s%s%s\n' "$gap" '' "$dim" "$description" "$reset"
+                frame+=$line
             fi
         done
+        append_line ""
         if (( selected == count )); then
-            printf '\n  %s▸ Back%s\n' "$cyan" "$reset" >&3
+            append_line "  ${cyan}● ${bold}Back${reset}"
         else
-            printf '\n    Back\n' >&3
+            append_line "  ${gray}○${reset} Back"
         fi
-        printf '\n  %s[↑/↓] Move    [Enter] Select%s\n' "$dim" "$reset" >&3
+        append_line ""
+        if (( footer_lines == 1 )); then
+            append_line "  ${dim}${footer}${reset}"
+        else
+            for footer in '[↑/↓] Move' '[Enter] Select' '[Esc] Back'; do
+                append_line "  ${dim}${footer:0:columns-4}${reset}"
+            done
+        fi
+        printf '\033[H%s\033[J' "$frame" >&3
 
         if ! IFS= read -r -n 1 -u 3 key; then
             return 1

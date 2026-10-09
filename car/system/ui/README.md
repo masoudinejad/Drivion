@@ -56,7 +56,9 @@ Other errors use a nonzero status. Empty option lists display Back alone.
 The interface uses the controlling terminal; only the result goes to stdout.
 It restores terminal settings when it exits. Standalone calls also restore
 the previous screen; management keeps one shared screen until the app exits.
-Back uses the same plain text and cyan selection as other options. Long lists
+Every option has a circle marker: `●` for the cyan selection, `○` in gray
+for other items. Back uses the same markers and colors as the other options.
+The markers also distinguish selection with `NO_COLOR` enabled. Long lists
 scroll while Back stays visible. Set `NO_COLOR=1` to disable styling. The menu
 does not perform the selected action; its caller decides what to do next.
 
@@ -173,3 +175,21 @@ stay inside the management UI. Back from the top menu, cancellation, and errors
 restore the original shell screen and cursor. The internal
 `DRIVION_UI_SCREEN_ACTIVE` environment flag lets child processes share this
 ownership; callers should use the context manager rather than setting it.
+
+## Selector presentation
+
+Menus redraw complete frames in one write, erasing each row and trailing content
+rather than clearing the full screen on every keypress. The selected label is
+bold and cyan; inactive circle markers are gray. Keyboard hints split into
+separate lines on narrow terminals.
+
+Pass one `--description TEXT` per option before `--` to show aligned, dim
+explanations. Descriptions are hidden when the full row would not fit. Python
+management menus obtain descriptions from the `[menus]` tables in `theme.toml`,
+keyed by menu title and option label. For example:
+
+```bash
+bash ./system/ui/menu.sh --title "Actions" \
+    --description "Inspect current status" --description "Apply changes" \
+    -- "Inspect" "Update"
+```

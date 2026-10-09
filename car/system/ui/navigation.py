@@ -4,7 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from .theme import load_theme
+from .theme import load_theme, menu_descriptions
 
 
 def confirm(question):
@@ -24,12 +24,19 @@ def confirm(question):
 
 def select_item(title, labels):
     """Return a zero-based selection, or None for Back; propagate cancellation."""
+    descriptions = menu_descriptions(title, labels)
+    description_args = [
+        value
+        for description in descriptions
+        for value in ("--description", description)
+    ]
     result = subprocess.run(
         [
             "bash",
             str(Path(__file__).with_name("menu.sh")),
             "--title",
             title,
+            *description_args,
             "--",
             *labels,
         ],

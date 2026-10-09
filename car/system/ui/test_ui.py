@@ -49,7 +49,16 @@ def main():
     run_background("Demonstration background task", time.sleep, 2)
     exercise("progress.sh", "--message", "Command progress", "--", "sleep", "2")
     exercise(
-        "menu.sh", "--title", "Test arrows, Enter, or Escape", "--", "First", "Second"
+        "menu.sh",
+        "--title",
+        "Test arrows, Enter, or Escape",
+        "--description",
+        "First demonstration action",
+        "--description",
+        "Second demonstration action",
+        "--",
+        "First",
+        "Second",
     )
     exercise("confirm.sh", "--question", "Does the confirmation look correct?")
     for kind, example in (

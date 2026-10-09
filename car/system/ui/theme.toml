@@ -8,3 +8,14 @@ gray = 90 # Banner borders
 bold = 1
 dim = 2
 reset = 0
+
+
+# Optional muted descriptions, keyed by menu title and option label.
+[menus."Drivion system management"]
+"System Info" = "View hardware and deployment details"
+Arduino = "Identify devices and manage firmware"
+
+[menus.Arduino]
+"Identify and select device" = "Find a connected board"
+"Change firmware" = "Compile and flash a registered sketch"
+"Check firmware" = "Verify the running firmware"
