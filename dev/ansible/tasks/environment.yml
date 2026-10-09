@@ -38,7 +38,7 @@
     - name: Create the named environment from system Python
       ansible.builtin.command:
         argv:
-          - /usr/local/bin/uv
+          - "{{ uv_executable_directory }}/uv"
           - venv
           - --python
           - /usr/bin/python3
@@ -64,7 +64,7 @@
     - name: Install the locked Python dependencies
       ansible.builtin.command:
         argv:
-          - /usr/local/bin/uv
+          - "{{ uv_executable_directory }}/uv"
           - sync
           - --project
           - "{{ car_root }}/system"
@@ -83,7 +83,7 @@
     - name: Verify installed dependency consistency
       ansible.builtin.command:
         argv:
-          - /usr/local/bin/uv
+          - "{{ uv_executable_directory }}/uv"
           - pip
           - check
           - --python

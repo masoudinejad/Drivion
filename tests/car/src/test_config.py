@@ -13,6 +13,12 @@ def test_repository_config_loads():
     assert (config.camera.sensor_width, config.camera.sensor_height) == (1640, 1232)
     assert config.camera.file_format == "numpy"
     assert config.system.python_environment.name == "drivion"
+    assert config.system.network.fallback_ipv4_address == "10.42.0.1"
+    assert config.system.network.fallback_delay_seconds == 60
+    assert config.system.provisioning.uv.version == "0.12.20"
+    assert config.system.provisioning.uv.executable_directory == "/usr/local/bin"
+    assert config.arduino.provisioning is not None
+    assert len(config.arduino.provisioning.cli_archive_sha256) == 64
 
 
 def test_override_preserves_other_fields_and_original():
@@ -88,6 +94,38 @@ def test_unknown_sections_and_unimplemented_settings_rejected():
         AppConfig.model_validate({"camrea": {}})
     with pytest.raises(ValidationError):
         AppConfig.model_validate({"recording": {"unknown": True}})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("fallback_ipv4_address", "10.42.0.0"),
+        ("fallback_ssid_prefix", "x" * 26),
+        ("fallback_timer_accuracy_seconds", 61),
+    ],
+)
+def test_invalid_network_settings_rejected(field, value):
+    system = load_config().system.model_dump()
+    system["network"][field] = value
+    with pytest.raises(ValidationError):
+        AppConfig.model_validate({"system": system})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("data_directory", "/home/driver/.arduino15"),
+        ("download_directory", "../staging"),
+        ("config_path", ".arduino15/nested/arduino-cli.yaml"),
+        ("sketchbook_directory", "../outside"),
+        ("cli_install_directory", "opt/arduino-cli"),
+    ],
+)
+def test_invalid_arduino_provisioning_paths_rejected(field, value):
+    config = load_config().arduino.provisioning.model_dump()
+    config[field] = value
+    with pytest.raises(ValidationError):
+        AppConfig.model_validate({"arduino": {"provisioning": config}})
 
 
 @pytest.mark.parametrize("channels", ["rgb", "y"])

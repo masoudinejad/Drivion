@@ -1,0 +1,10 @@
+[Unit]
+Description=Activate the Drivion Wi-Fi fallback hotspot
+After=NetworkManager.service drivion-system-info.service
+Wants=NetworkManager.service
+Requires=drivion-system-info.service
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/usr/local/lib/drivion
+ExecStart=/usr/bin/python3 -m system.network.fallback --car-root {{ car_root }}

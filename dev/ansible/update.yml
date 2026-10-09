@@ -2,8 +2,6 @@
   hosts: raspberry_pi
   become: true
   gather_facts: false
-  vars_files:
-    - vars.yml
   tasks:
     - name: Refresh the apt package index
       ansible.builtin.apt:
@@ -20,13 +18,19 @@
         auto_install_module_deps: false
 
     - name: Install system packages
-      ansible.builtin.import_tasks: packages.yml
+      ansible.builtin.import_tasks: tasks/packages.yml
 
     - name: Install uv
-      ansible.builtin.import_tasks: uv.yml
+      ansible.builtin.import_tasks: tasks/uv.yml
+
+    - name: Install and configure Arduino CLI
+      ansible.builtin.import_tasks: tasks/arduino.yml
+
+    - name: Configure Wi-Fi fallback access
+      ansible.builtin.import_tasks: tasks/network.yml
 
     - name: Create the configured car Python environment
-      ansible.builtin.import_tasks: environment.yml
+      ansible.builtin.import_tasks: tasks/environment.yml
 
     - name: Check the reboot-required marker
       ansible.builtin.stat:

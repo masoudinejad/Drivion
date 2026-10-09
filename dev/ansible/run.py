@@ -9,16 +9,30 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Allow direct invocation as well as python -m dev.ansible.run.
 ROOT = Path(__file__).resolve().parents[2]
 if not __package__:
     sys.path.insert(0, str(ROOT))
 
+from car.system.configuration import arduino_settings, network_settings, uv_settings
 from car.system.environment import environment_path
 from car.system.provisioning import system_settings
 from dev.sync import sync_car
+
+
+def hotspot_password(settings):
+    password = settings.get("PI_HOTSPOT_PASSWORD") or settings.get("PI_PASSWORD", "")
+    try:
+        password.encode("ascii")
+    except UnicodeEncodeError as error:
+        raise ValueError("PI_HOTSPOT_PASSWORD must contain printable ASCII") from error
+    if not 8 <= len(password) <= 63 or not password.isprintable():
+        raise ValueError(
+            "PI_HOTSPOT_PASSWORD (or PI_PASSWORD fallback) must be 8-63 printable ASCII characters"
+        )
+    return password
 
 
 def build_inventory(settings):
@@ -26,8 +40,12 @@ def build_inventory(settings):
     command = sync_car.build_command(settings)
     ssh = shlex.split(command[command.index("--rsync-path") - 1])
     relative_environment = environment_path(ROOT / "car").relative_to(ROOT / "car")
+    network = network_settings(ROOT / "car")
+    uv = uv_settings(ROOT / "car")
+    arduino = arduino_settings(ROOT / "car")
     packages, _ = system_settings(ROOT / "car")
     car_root = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
+    car_home = f"/home/{settings['PI_USER']}"
     return {
         "all": {
             "children": {
@@ -43,8 +61,44 @@ def build_inventory(settings):
                             "system_packages": packages,
                             "car_environment_name": relative_environment.name,
                             "car_environment_path": f"{car_root}/{relative_environment}",
+                            "arduino_cli_version": arduino.cli_version,
+                            "arduino_cli_archive_name": arduino.cli_archive_name,
+                            "arduino_cli_archive_sha256": arduino.cli_archive_sha256,
+                            "arduino_cli_release_url": arduino.cli_release_url,
+                            "arduino_cli_install_directory": arduino.cli_install_directory,
+                            "arduino_cli_archive_executable": arduino.cli_archive_executable,
+                            "arduino_cli_executable_path": arduino.cli_executable_path,
+                            "arduino_data_directory": str(
+                                PurePosixPath(car_home) / arduino.data_directory
+                            ),
+                            "arduino_download_directory": str(
+                                PurePosixPath(car_home) / arduino.download_directory
+                            ),
+                            "arduino_config_path": str(
+                                PurePosixPath(car_home) / arduino.config_path
+                            ),
+                            "arduino_sketchbook_directory": str(
+                                PurePosixPath(car_root) / arduino.sketchbook_directory
+                            ),
+                            "arduino_serial_group": arduino.serial_group,
+                            "arduino_avr_core": arduino.avr_core,
+                            "arduino_avr_core_version": arduino.avr_core_version,
                             "controller_root": str(ROOT),
                             "controller_python": sys.executable,
+                            "wifi_interface": network.wifi_interface,
+                            "wifi_fallback_profile": network.fallback_profile,
+                            "wifi_fallback_ssid_prefix": network.fallback_ssid_prefix,
+                            "wifi_fallback_ipv4_cidr": network.fallback_ipv4_cidr,
+                            "wifi_fallback_delay_seconds": network.fallback_delay_seconds,
+                            "wifi_fallback_timer_accuracy_seconds": (
+                                network.fallback_timer_accuracy_seconds
+                            ),
+                            "uv_version": uv.version,
+                            "uv_archive_name": uv.archive_name,
+                            "uv_archive_sha256": uv.archive_sha256,
+                            "uv_release_url": uv.release_url,
+                            "uv_install_directory": uv.install_directory,
+                            "uv_executable_directory": uv.executable_directory,
                         }
                     }
                 }
@@ -69,6 +123,9 @@ def main(argv=None):
         inventory = build_inventory(settings)
         if not args.syntax_check and not settings.get("PI_PASSWORD"):
             raise ValueError("Set PI_PASSWORD in dev/sync/.env for sudo")
+        configured_hotspot_password = (
+            "" if args.syntax_check else hotspot_password(settings)
+        )
         if shutil.which("ansible-playbook") is None:
             raise ValueError(
                 "Run through uv run --project dev to use the Ansible environment"
@@ -80,6 +137,7 @@ def main(argv=None):
             )
         # The sudo password never goes into inventory files or command arguments.
         environment["ANSIBLE_BECOME_PASS"] = settings.get("PI_PASSWORD", "")
+        environment["DRIVION_HOTSPOT_PASSWORD"] = configured_hotspot_password
         with tempfile.TemporaryDirectory(prefix="drivion-ansible-") as directory:
             path = Path(directory) / "inventory.json"
             path.write_text(json.dumps(inventory))

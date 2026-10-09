@@ -11,7 +11,7 @@ car/
   config.toml            Central car settings
   src/                   Driving application modules
   system/                Setup, updates, and the car Python environment
-    arduino/firmware/    Arduino Nano C/C++ firmware
+    arduino/code/        Arduino CLI sketchbook and Nano C/C++ firmware
     arduino/scripts/     Build and flash tools run on the Pi
 model_development/       Training and evaluation; independent uv project
 dev/                     Development utilities; independent uv project
@@ -46,6 +46,14 @@ On the Pi, run `~/car/drive.py` from any directory. The system-Python shebang
 starts a small bootstrap which reads the TOML configuration and executes the
 configured environment's Python. No activation or dependency installation occurs
 at startup. Driving functionality is currently a placeholder.
+
+Provisioning also configures a Wi-Fi fallback for headless access. With the
+default central settings, the Pi tries its saved Wi-Fi networks for 60 seconds
+and then starts a unique `Drivion-XXXXXX` hotspot if none connects. Join that
+network and SSH to `driver@10.42.0.1`. Network names, timing, interface, and
+address are configured under `system.network` in `car/config.toml`. See
+`dev/ansible/README.md` for password configuration and the SSH host-key
+consideration when switching between cars.
 
 Each Python use case has its own dependencies and lockfile. Virtual environments
 are created locally and ignored by Git. Model development and tools can be

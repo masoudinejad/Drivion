@@ -15,7 +15,7 @@
   become: false
   ansible.builtin.command:
     argv:
-      - /usr/local/bin/uv
+      - "{{ uv_executable_directory }}/uv"
       - --version
   register: current_uv
   changed_when: false
@@ -24,7 +24,9 @@
 
 - name: Preview uv installation
   ansible.builtin.debug:
-    msg: "Install uv {{ uv_version }} and uvx into /usr/local/bin from the checksum-verified official ARM64 archive."
+    msg: >-
+      Install uv {{ uv_version }} and uvx into {{ uv_executable_directory }}
+      from the checksum-verified official ARM64 archive.
   changed_when: current_uv.rc != 0 or current_uv.stdout.split()[:2] != ['uv', uv_version]
   when: ansible_check_mode
 
@@ -58,7 +60,7 @@
     - name: Install uv and uvx for all users
       ansible.builtin.copy:
         src: "{{ uv_install_directory }}/{{ uv_archive_name }}/{{ item }}"
-        dest: "/usr/local/bin/{{ item }}"
+        dest: "{{ uv_executable_directory }}/{{ item }}"
         remote_src: true
         owner: root
         group: root
@@ -71,7 +73,7 @@
       become: false
       ansible.builtin.command:
         argv:
-          - uv
+          - "{{ uv_executable_directory }}/uv"
           - --version
       register: installed_uv
       changed_when: false

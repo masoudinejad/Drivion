@@ -65,5 +65,8 @@ packages = [
     "build-essential",
     "linux-libc-dev",
     "libgomp1",
+    "dnsmasq-base",
+    "network-manager",
+    "openssh-server",
 ]
 system_imports = ["picamera2", "libcamera"]

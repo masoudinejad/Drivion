@@ -28,6 +28,7 @@ EXCLUDES = (
     ".pytest_cache/",
     ".ruff_cache/",
     ".ssh/",
+    "/system/info.toml",
     "/system/version.toml",
     "/system/env/",
 )
@@ -104,7 +105,7 @@ def sync_versioned(settings, environment, dry_run=False, password=False):
         if result.returncode or dry_run:
             return result.returncode
         record["deployed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        content = versioning.version_toml(record)
+        content = versioning.software_toml(record)
         ssh = shlex.split(command[command.index("--rsync-path") - 1])
         destination = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
         ssh.extend(
@@ -119,7 +120,12 @@ def sync_versioned(settings, environment, dry_run=False, password=False):
         if password:
             ssh = ["sshpass", "-e"] + ssh
         result = subprocess.run(
-            ssh, input=content, text=True, env=environment, check=False
+            ssh,
+            input=content,
+            text=True,
+            env=environment,
+            stdout=subprocess.PIPE,
+            check=False,
         )
         if result.returncode:
             print(
@@ -128,8 +134,8 @@ def sync_versioned(settings, environment, dry_run=False, password=False):
             )
             return result.returncode
         # Keep a local copy of the last successfully published deployment record.
-        destination = CAR_DIR / versioning.VERSION_PATH
-        destination.write_text(content)
+        destination = CAR_DIR / versioning.INFO_PATH
+        destination.write_text(result.stdout)
         print(f"Deployed {record['version']} (dirty={record['dirty']})", flush=True)
         return 0
 

@@ -1,0 +1,148 @@
+- name: Check for the fallback hotspot profile
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - show
+      - "{{ wifi_fallback_profile }}"
+  register: hotspot_profile
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Create the fallback hotspot profile
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - add
+      - type
+      - wifi
+      - ifname
+      - "{{ wifi_interface }}"
+      - con-name
+      - "{{ wifi_fallback_profile }}"
+      - ssid
+      - "{{ wifi_fallback_ssid_prefix }}-Setup"
+  when: hotspot_profile.rc != 0 and not ansible_check_mode
+  changed_when: true
+
+- name: Configure the fallback hotspot profile
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - connection
+      - modify
+      - "{{ wifi_fallback_profile }}"
+      - connection.autoconnect
+      - "no"
+      - connection.interface-name
+      - "{{ wifi_interface }}"
+      - 802-11-wireless.mode
+      - ap
+      - ipv4.method
+      - shared
+      - ipv4.addresses
+      - "{{ wifi_fallback_ipv4_cidr }}"
+      - ipv6.method
+      - disabled
+      - wifi-sec.key-mgmt
+      - wpa-psk
+      - wifi-sec.psk
+      - "{{ lookup('ansible.builtin.env', 'DRIVION_HOTSPOT_PASSWORD') }}"
+  when: not ansible_check_mode
+  changed_when: true
+  no_log: true
+
+- name: Preview fallback hotspot configuration
+  ansible.builtin.debug:
+    msg: >-
+      Configure {{ wifi_fallback_profile }} on {{ wifi_interface }} at
+      {{ wifi_fallback_ipv4_cidr }} and activate it
+      {{ wifi_fallback_delay_seconds }} seconds after boot only when Wi-Fi has
+      no active connection.
+  when: ansible_check_mode
+
+- name: Remove the superseded version-only record
+  ansible.builtin.file:
+    path: "{{ car_root }}/system/version.toml"
+    state: absent
+
+- name: Create the protected Drivion service module directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /usr/local/lib/drivion/system
+    - /usr/local/lib/drivion/system/information
+    - /usr/local/lib/drivion/system/network
+
+- name: Install the protected Drivion service modules
+  ansible.builtin.copy:
+    src: "{{ controller_root }}/car/system/{{ item.source }}"
+    dest: "/usr/local/lib/drivion/system/{{ item.destination }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - source: __init__.py
+      destination: __init__.py
+    - source: configuration.py
+      destination: configuration.py
+    - source: information/__init__.py
+      destination: information/__init__.py
+    - source: information/update.py
+      destination: information/update.py
+    - source: network/__init__.py
+      destination: network/__init__.py
+    - source: network/fallback.py
+      destination: network/fallback.py
+
+- name: Install the system information service
+  ansible.builtin.template:
+    src: network/drivion-system-info.service.j2
+    dest: /etc/systemd/system/drivion-system-info.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the Wi-Fi fallback service
+  ansible.builtin.template:
+    src: network/drivion-wifi-fallback.service.j2
+    dest: /etc/systemd/system/drivion-wifi-fallback.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the Wi-Fi fallback timer
+  ansible.builtin.template:
+    src: network/drivion-wifi-fallback.timer.j2
+    dest: /etc/systemd/system/drivion-wifi-fallback.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable SSH access
+  ansible.builtin.systemd_service:
+    name: ssh
+    enabled: true
+    state: started
+
+- name: Enable boot-time system information refresh
+  ansible.builtin.systemd_service:
+    name: drivion-system-info.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Enable the delayed Wi-Fi fallback timer
+  ansible.builtin.systemd_service:
+    name: drivion-wifi-fallback.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not ansible_check_mode

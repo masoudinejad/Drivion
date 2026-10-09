@@ -1,0 +1,10 @@
+[Unit]
+Description=Check whether Drivion needs its Wi-Fi fallback hotspot
+
+[Timer]
+OnBootSec={{ wifi_fallback_delay_seconds }}s
+AccuracySec={{ wifi_fallback_timer_accuracy_seconds }}s
+Unit=drivion-wifi-fallback.service
+
+[Install]
+WantedBy=timers.target

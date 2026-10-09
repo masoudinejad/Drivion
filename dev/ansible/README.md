@@ -15,6 +15,40 @@ sudo. It does not enable passwordless sudo or change SSH authentication.
 The password is passed through the subprocess environment, not command arguments
 or generated inventory files. Keep `.env` ignored and restricted to your user.
 
+The same playbook configures a fallback Wi-Fi hotspot. Its non-secret settings
+come only from `system.network` in `car/config.toml`. Set
+`PI_HOTSPOT_PASSWORD` in `dev/sync/.env`, or leave it empty to reuse
+`PI_PASSWORD`. The selected password must contain 8-63 printable ASCII
+characters. It is passed through the Ansible process environment and hidden
+from task output.
+
+At boot, NetworkManager first tries saved Wi-Fi profiles normally. After 60
+seconds, `drivion-wifi-fallback.timer` starts the hotspot only if `wlan0` still
+has no active connection. The SSID is `Drivion-` followed by the final six
+characters of the Raspberry Pi serial number. Its local address is always
+`10.42.0.1`; it provides local access and does not require an internet uplink.
+The hotspot never autoconnects on its own, so every reboot retries saved Wi-Fi
+networks before falling back.
+
+Raspberry Pi OS must have its WLAN country configured, as it does for normal
+Wi-Fi client use. Set it during imaging or with `raspi-config`; the playbook does
+not guess a regulatory country.
+
+Because every hotspot uses the same IP address but each Pi has its own SSH host
+key, identify the key by the visible SSID when connecting. For example:
+
+```sh
+ssh -o HostKeyAlias=Drivion-A4F29C driver@10.42.0.1
+```
+
+Using only `driver@10.42.0.1` for multiple cars causes an expected SSH host-key
+mismatch warning. Do not disable SSH host-key checking to suppress it.
+
+`drivion-system-info.service` runs on every boot before the fallback check. It
+refreshes `~/car/system/info.toml` and the hotspot SSID from the current Pi. If
+the SD card moves to another Pi, the model, serial number, and SSID therefore
+change on the next boot while the software deployment information is retained.
+
 Ansible runs locally; the Pi needs SSH, `/usr/bin/python3`, python3-apt, and sudo.
 The playbook refreshes the apt index and performs a standard package upgrade.
 It preserves existing configuration files using the apt module defaults.
@@ -29,10 +63,19 @@ System camera imports are declared in the same file under
 `tool.drivion.provisioning.system_imports` and verified
 inside the configured environment with access to system packages.
 
-It installs uv and uvx into `/usr/local/bin`, using the pinned official ARM64
-archive and SHA-256 checksum in `vars.yml`. The archive is kept under
-`/opt/drivion/uv/<version>/`. Installation does not change shell profiles or
-download a separate Python interpreter. The Pi must use a 64-bit ARM OS.
+It installs uv and uvx using the pinned official ARM64 archive and SHA-256
+checksum configured under `system.provisioning.uv` in `car/config.toml`.
+Installation does not change shell profiles or download a separate Python
+interpreter. The Pi must use a 64-bit ARM OS.
+
+It also installs the configured Arduino CLI ARM64 release, grants the car user
+the configured serial-device group, and installs the configured AVR core. Each
+sketch should be placed in its own folder under the configured sketchbook. A new
+login is required before an existing shell gains the new group membership.
+Versions, checksums, URLs, groups, core identifiers, and Arduino paths are
+defined only in `car/config.toml` under `arduino.provisioning`; the runner
+validates and passes them to Ansible.
+
 It then syncs the car folder and creates the configured environment, currently
 `~/car/system/env/drivion`, from OS Python with system package access. Build
 headers, a compiler, and libgomp are installed for evdev and numerical packages.
@@ -65,3 +108,7 @@ cache. Future maintenance steps can extend this playbook or add new playbooks.
 In check mode, package installation is previewed. uv installation is reported
 without downloading or extracting the archive; import and runtime verification
 run only during a real application.
+
+The playbook entry point is `update.yml`. Reusable operations are grouped under
+`tasks/`, while service and application templates are grouped by domain under
+`templates/`.

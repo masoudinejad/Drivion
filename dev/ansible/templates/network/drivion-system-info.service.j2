@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh Drivion system information and hotspot identity
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/usr/local/lib/drivion
+ExecStart=/usr/bin/python3 -m system.information.update --car-root {{ car_root }} --update-hotspot
+
+[Install]
+WantedBy=multi-user.target

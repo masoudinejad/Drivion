@@ -1,0 +1,209 @@
+- name: Inspect the currently installed Arduino CLI version
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - version
+  register: current_arduino_cli
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Preview Arduino CLI installation
+  ansible.builtin.debug:
+    msg: >-
+      Install Arduino CLI {{ arduino_cli_version }} from the checksum-verified
+      official ARM64 archive.
+  changed_when: >-
+    current_arduino_cli.rc != 0 or
+    ('Version: ' ~ arduino_cli_version) not in current_arduino_cli.stdout
+  when: ansible_check_mode
+
+- name: Install the pinned Arduino CLI release
+  when:
+    - not ansible_check_mode
+    - >-
+      current_arduino_cli.rc != 0 or
+      ('Version: ' ~ arduino_cli_version) not in current_arduino_cli.stdout
+  block:
+    - name: Create the versioned Arduino CLI directory
+      ansible.builtin.file:
+        path: "{{ arduino_cli_install_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Download the official Arduino CLI archive and verify its checksum
+      ansible.builtin.get_url:
+        url: "{{ arduino_cli_release_url }}/{{ arduino_cli_archive_name }}.tar.gz"
+        dest: "{{ arduino_cli_install_directory }}/arduino-cli.tar.gz"
+        checksum: "sha256:{{ arduino_cli_archive_sha256 }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Extract the verified Arduino CLI archive
+      ansible.builtin.unarchive:
+        src: "{{ arduino_cli_install_directory }}/arduino-cli.tar.gz"
+        dest: "{{ arduino_cli_install_directory }}"
+        remote_src: true
+        creates: >-
+          {{ arduino_cli_install_directory }}/{{ arduino_cli_archive_executable }}
+
+    - name: Install Arduino CLI for all users
+      ansible.builtin.copy:
+        src: >-
+          {{ arduino_cli_install_directory }}/{{ arduino_cli_archive_executable }}
+        dest: "{{ arduino_cli_executable_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+- name: Verify the installed Arduino CLI version
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - version
+  register: installed_arduino_cli
+  changed_when: false
+  failed_when: >-
+    installed_arduino_cli.rc != 0 or
+    ('Version: ' ~ arduino_cli_version) not in installed_arduino_cli.stdout
+  when: not ansible_check_mode
+
+- name: Allow the car user to access Arduino serial devices
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups:
+      - "{{ arduino_serial_group }}"
+    append: true
+
+- name: Create the Arduino CLI data and sketchbook directories
+  become: false
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ arduino_data_directory }}"
+    - "{{ arduino_download_directory }}"
+    - "{{ arduino_sketchbook_directory }}"
+
+- name: Configure the Arduino CLI sketchbook
+  become: false
+  ansible.builtin.template:
+    src: arduino/arduino-cli.yaml.j2
+    dest: "{{ arduino_config_path }}"
+    mode: "0644"
+
+- name: Preview Arduino AVR core installation
+  ansible.builtin.debug:
+    msg: >-
+      Ensure Arduino AVR Boards {{ arduino_avr_core_version }} is installed for
+      the car user.
+  when: ansible_check_mode
+
+- name: Inspect installed Arduino cores
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - --config-file
+      - "{{ arduino_config_path }}"
+      - core
+      - list
+      - --json
+  register: installed_arduino_cores
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Record whether the pinned AVR core is installed
+  ansible.builtin.set_fact:
+    arduino_avr_core_is_installed: >-
+      {{
+        installed_arduino_cores.rc == 0 and
+        (
+          (installed_arduino_cores.stdout | from_json).platforms
+          | selectattr('id', 'equalto', arduino_avr_core)
+          | selectattr('installed', 'equalto', arduino_avr_core_version)
+          | list
+          | length
+        ) == 1
+      }}
+  when: not ansible_check_mode
+
+- name: Update the Arduino core package index
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - --config-file
+      - "{{ arduino_config_path }}"
+      - core
+      - update-index
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not arduino_avr_core_is_installed
+
+- name: Install the pinned Arduino AVR core
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - --config-file
+      - "{{ arduino_config_path }}"
+      - core
+      - install
+      - "{{ arduino_avr_core }}@{{ arduino_avr_core_version }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - not arduino_avr_core_is_installed
+
+- name: Verify the Arduino CLI sketchbook path
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - --config-file
+      - "{{ arduino_config_path }}"
+      - config
+      - get
+      - directories.user
+  register: configured_arduino_sketchbook
+  changed_when: false
+  failed_when: configured_arduino_sketchbook.stdout | trim != arduino_sketchbook_directory
+  when: not ansible_check_mode
+
+- name: Verify the pinned Arduino AVR core
+  become: false
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - --config-file
+      - "{{ arduino_config_path }}"
+      - core
+      - list
+      - --json
+  register: verified_arduino_cores
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Confirm the pinned Arduino AVR core is installed
+  ansible.builtin.assert:
+    that:
+      - >-
+        (
+          (verified_arduino_cores.stdout | from_json).platforms
+          | selectattr('id', 'equalto', arduino_avr_core)
+          | selectattr('installed', 'equalto', arduino_avr_core_version)
+          | list
+          | length
+        ) == 1
+    fail_msg: >-
+      Arduino AVR Boards {{ arduino_avr_core_version }} was not installed.
+  when: not ansible_check_mode

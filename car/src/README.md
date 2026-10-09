@@ -8,10 +8,11 @@ environment managed in `../system/`.
 
 `config.py` loads the central `car/config.toml` into a Pydantic `AppConfig`.
 Models reject unknown keys, invalid types and invalid values. Missing application
-sections use model defaults; a supplied system section requires its existing
-Python environment fields. Empty sections reserve future schemas and reject settings
-until their models are defined. System provisioning tools keep their existing
-loaders so they can run before application dependencies are installed.
+sections use model defaults; a supplied system section requires its complete
+environment, network, and provisioning settings. Empty sections reserve future
+schemas and reject settings until their models are defined. System provisioning
+tools use a standard-library loader so they can run before application
+dependencies are installed.
 
 Pass each component its own section. Use `with_overrides` to create a validated
 copy while retaining other settings and leaving the original unchanged:

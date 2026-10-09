@@ -1,23 +1,17 @@
 """Resolve the central configuration's named Python environment."""
 
-import re
 from pathlib import Path
 
-import tomllib
+if __package__:
+    from .configuration import python_environment_settings
+else:
+    from configuration import python_environment_settings
 
 
 def environment_path(car_root):
     car_root = Path(car_root).resolve()
-    with (car_root / "config.toml").open("rb") as stream:
-        settings = tomllib.load(stream).get("system", {}).get("python_environment", {})
-    name, path = settings.get("name"), settings.get("path")
-    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
-        raise ValueError("Configure a valid system.python_environment.name")
-    if not isinstance(path, str) or Path(path).is_absolute():
-        raise ValueError("The environment path must be relative to car/")
-    if Path(path).parts != ("system", "env", name):
-        raise ValueError("The environment path must be system/env/<name>")
-    target = (car_root / path).resolve()
+    settings = python_environment_settings(car_root)
+    target = (car_root / settings.path).resolve()
     if not target.is_relative_to(car_root):
         raise ValueError("The environment path must stay inside car/")
     return target
