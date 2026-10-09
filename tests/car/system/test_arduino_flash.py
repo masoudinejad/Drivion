@@ -1,22 +1,20 @@
 """Exercise flashing and serial verification without touching real hardware."""
 
 import copy
-import json
-import shutil
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import tomllib
 
-from car.system.arduino.firmware import artifact_checksums
-from car.system.arduino.flash import FlashError, flash_firmware, query_firmware
+from car.system.arduino.device.flash import FlashError, flash_firmware
+from car.system.arduino.firmware.artifacts import artifact_checksums
 from car.system.information.update import publish
 
 ROOT = Path(__file__).resolve().parents[3] / "car"
-MODULE = "car.system.arduino.flash"
+MODULE = "car.system.arduino.device.flash"
 IDENTITY = {
     "firmware_name": "demo",
     "firmware_version": "1.2.0",
@@ -48,12 +46,8 @@ def mock_serial_dependency():
 
 
 @pytest.fixture
-def build(tmp_path):
-    root = tmp_path / "car"
-    root.mkdir()
-    shutil.copy(ROOT / "config.toml", root)
-    (root / "system").mkdir()
-    shutil.copy(ROOT / "system/pyproject.toml", root / "system")
+def build(car_tree):
+    root = car_tree
     publish(
         root / "system/info.toml",
         {"software": {"commit": "abc123"}, "hardware": {"model": "Pi"}},
@@ -266,51 +260,87 @@ def test_missing_serial_dependency_prevents_upload(build):
     approval.assert_not_called()
 
 
-def serial_settings():
-    with (ROOT / "config.toml").open("rb") as stream:
-        settings = tomllib.load(stream)["firmware_flash"]
-    return {**settings, "boot_wait_seconds": 0}
-
-
-def serial_mock(chunks):
-    connection = MagicMock()
-    connection.__enter__.return_value = connection
-    connection.write.side_effect = lambda command: len(command)
-    connection.read_until.side_effect = chunks
-    return SimpleNamespace(Serial=MagicMock(return_value=connection)), connection
-
-
-def test_query_handles_partial_lines_and_chatter():
-    encoded = json.dumps(IDENTITY).encode() + b"\n"
-    serial, connection = serial_mock([b"Ready\n", encoded[:20], encoded[20:]])
-    trace = {}
-    with patch(f"{MODULE}.load_serial", return_value=serial):
-        assert query_firmware("/dev/ttyUSB0", serial_settings(), trace) == IDENTITY
-    connection.write.assert_called_once_with(b"INFO\n")
-    assert len(trace["responses"]) == 3
-    assert serial.Serial.call_args.kwargs["exclusive"] is True
-
-
-def test_query_bounds_response_size():
-    serial, _ = serial_mock([b"x" * 1025])
+@pytest.fixture
+def approved_flash():
     with (
-        patch(f"{MODULE}.load_serial", return_value=serial),
-        pytest.raises(ValueError, match="response budget"),
+        patch(f"{MODULE}.confirm", return_value=True),
+        patch(f"{MODULE}.discover", return_value=REPORT),
+        patch(f"{MODULE}.subprocess.run", side_effect=successful_upload) as upload,
+        patch(f"{MODULE}.query_firmware", return_value=IDENTITY),
     ):
-        query_firmware("/dev/ttyUSB0", serial_settings(), {})
+        yield upload
 
 
-def test_query_deadline_and_invalid_identity():
-    serial, _ = serial_mock([b""])
+def test_final_log_failure_preserves_query_error_and_updates_info(
+    build, approved_flash
+):
+    root, artifacts = build
+
+    def write_log(path, data):
+        if "finished_at" in data["flash"]:
+            raise OSError("final log unavailable")
+        return publish(path, data)
+
     with (
-        patch(f"{MODULE}.time.monotonic", side_effect=[0, 0, 0, 6]),
-        patch(f"{MODULE}.load_serial", return_value=serial),
-        pytest.raises(TimeoutError),
+        patch(f"{MODULE}.publish", side_effect=write_log),
+        patch(f"{MODULE}.query_firmware", side_effect=TimeoutError("identity timeout")),
+        pytest.raises(FlashError) as error,
     ):
-        query_firmware("/dev/ttyUSB0", serial_settings(), {})
-    serial, _ = serial_mock([b'{"firmware_version":"1"}\n'])
+        flash_firmware(artifacts, root)
+    assert isinstance(error.value.__cause__, TimeoutError)
+    assert "identity timeout" in str(error.value)
+    assert "final log unavailable" in str(error.value)
+    assert str(error.value.log_path) in str(error.value)
+    info = tomllib.loads((root / "system/info.toml").read_text())["arduino"]
+    assert info["firmware_status"] == "failed"
+    assert info["firmware_upload_status"] == "ok"
+
+
+def test_info_failure_still_finalizes_log_with_original_error(build, approved_flash):
+    from car.system.arduino.device.status import update_firmware_info
+
+    root, artifacts = build
+
+    def update(*args, **kwargs):
+        if "firmware_checked_at" in args[3]:
+            raise OSError("info unavailable")
+        return update_firmware_info(*args, **kwargs)
+
     with (
-        patch(f"{MODULE}.load_serial", return_value=serial),
-        pytest.raises(ValueError, match="identity response"),
+        patch(f"{MODULE}.update_firmware_info", side_effect=update),
+        patch(f"{MODULE}.query_firmware", side_effect=TimeoutError("identity timeout")),
+        pytest.raises(FlashError) as error,
     ):
-        query_firmware("/dev/ttyUSB0", serial_settings(), {})
+        flash_firmware(artifacts, root)
+    assert isinstance(error.value.__cause__, TimeoutError)
+    log = tomllib.loads(error.value.log_path.read_text())["flash"]
+    assert "identity timeout" in log["error"]
+    assert log["system_info_error"] == "info unavailable"
+    assert "finished_at" in log
+
+
+def test_interrupt_survives_finalization_failure(build, approved_flash):
+    root, artifacts = build
+
+    def write_log(path, data):
+        if "finished_at" in data["flash"]:
+            raise OSError("final log unavailable")
+        return publish(path, data)
+
+    with (
+        patch(f"{MODULE}.publish", side_effect=write_log),
+        patch(f"{MODULE}.query_firmware", side_effect=KeyboardInterrupt()),
+        pytest.raises(KeyboardInterrupt) as error,
+    ):
+        flash_firmware(artifacts, root)
+    assert any("final log unavailable" in note for note in error.value.__notes__)
+
+
+def test_initial_log_failure_prevents_upload(build, approved_flash):
+    root, artifacts = build
+    with (
+        patch(f"{MODULE}.publish", side_effect=OSError("no space")),
+        pytest.raises(FlashError, match="Unable to create flash log"),
+    ):
+        flash_firmware(artifacts, root)
+    approved_flash.assert_not_called()

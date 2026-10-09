@@ -1,0 +1,11 @@
+# Firmware-owned metadata and parameter contract, not deployment defaults.
+[firmware]
+version = "1.0.0"
+protocol_version = 1
+# Select atmega328old here when this Nano uses the old bootloader.
+fqbn = "arduino:avr:nano:cpu=atmega328"
+
+[parameters.BLINK_DURATION_MS]
+type = "integer"
+minimum = 1
+maximum = 4294967295

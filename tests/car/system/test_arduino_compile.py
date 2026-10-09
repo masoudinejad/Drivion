@@ -9,33 +9,32 @@ from unittest.mock import patch
 import pytest
 import tomllib
 
-from car.system.arduino.compile import (
+from car.system.arduino.firmware.compile import (
     c_literal,
     compile_firmware,
     render_header,
-    validate_compile_configuration,
+    stage_library,
 )
+from car.system.arduino.firmware.definitions import resolve_firmware
+from car.system.arduino.settings import tool_settings
 from car.system.ui.navigation import confirm
 
 ROOT = Path(__file__).resolve().parents[3] / "car"
-MODULE = "car.system.arduino.compile"
+MODULE = "car.system.arduino.firmware.compile"
 
 
 @pytest.fixture
-def car_root(tmp_path):
-    root = tmp_path / "car"
-    root.mkdir()
-    shutil.copy(ROOT / "config.toml", root)
-    (root / "system").mkdir()
-    shutil.copy(ROOT / "system/pyproject.toml", root / "system")
+def car_root(car_tree):
+    root = car_tree
     with (root / "config.toml").open("a") as stream:
-        stream.write(
-            '\n[firmware.demo]\nversion = "1.2.0"\nprotocol_version = 1\nfqbn = "arduino:avr:nano:cpu=atmega328"\nrequired_parameters = ["PIN", "LABEL", "ENABLED"]\n[firmware.demo.parameters]\nPIN = 5\nLABEL = \'a"b\'\nENABLED = true\n'
-        )
-    sketch = root / "system/arduino/code/demo"
+        stream.write("\n[firmware.demo]\nPIN = 5\nLABEL = 'a\"b'\nENABLED = true\n")
+    sketch = root / "system/arduino/sketches/demo"
     sketch.mkdir(parents=True)
     (sketch / "demo.ino").write_text(
         '#include "drivion_generated.h"\nvoid setup() {}\nvoid loop() {}\n'
+    )
+    (sketch / "firmware.toml").write_text(
+        '[firmware]\nversion = "1.2.0"\nprotocol_version = 1\nfqbn = "arduino:avr:nano:cpu=atmega328"\n[parameters.PIN]\ntype = "integer"\n[parameters.LABEL]\ntype = "string"\n[parameters.ENABLED]\ntype = "boolean"\n'
     )
     return root
 
@@ -68,7 +67,7 @@ def test_compile_generated_header_and_cli(car_root):
     assert "#define DRIVION_SOURCE_DIRTY true" in header
     assert '#define LABEL "a\\042b"' in header
     assert "#define PIN 5UL" in header
-    assert not (car_root / "system/arduino/code/demo/drivion_generated.h").exists()
+    assert not (car_root / "system/arduino/sketches/demo/drivion_generated.h").exists()
     command = run.call_args.args[0]
     assert command[3:6] == ["compile", "--fqbn", "arduino:avr:nano:cpu=atmega328"]
     assert "upload" not in command
@@ -77,7 +76,13 @@ def test_compile_generated_header_and_cli(car_root):
     assert manifest["firmware"]["firmware_version"] == "1.2.0"
     assert manifest["serial"]["baud_rate"] == 115200
     assert "demo.ino.hex" in manifest["artifacts"]
-    assert "drivionHandleInfo" in header
+    assert "DRIVION_INFO_RESPONSE" in header
+    assert "inline bool" not in header
+    library = artifacts.parent / "demo/src/DrivionFirmware/DrivionFirmware.h"
+    assert (
+        library.read_bytes()
+        == (ROOT / "system/arduino/library/DrivionFirmware.h").read_bytes()
+    )
 
 
 def test_refusal_has_no_side_effects(car_root):
@@ -88,6 +93,29 @@ def test_refusal_has_no_side_effects(car_root):
         assert compile_firmware("demo", car_root) is None
     run.assert_not_called()
     assert not (car_root / "system/arduino/build").exists()
+
+
+def test_library_staging_preserves_source_and_rejects_collisions(tmp_path):
+    sketch = tmp_path / "sketch"
+    sketch.mkdir()
+    settings = tool_settings(ROOT, "compile")
+    stage_library(sketch, ROOT, settings)
+    staged = sketch / "src/DrivionFirmware/DrivionFirmware.h"
+    original = (ROOT / settings["library_directory"] / "DrivionFirmware.h").read_bytes()
+    staged.write_text("local change")
+    assert (
+        ROOT / settings["library_directory"] / "DrivionFirmware.h"
+    ).read_bytes() == original
+    with pytest.raises(FileExistsError):
+        stage_library(sketch, ROOT, settings)
+    assert staged.read_text() == "local change"
+
+
+def test_library_staging_rejects_symlink(car_root, tmp_path):
+    library = car_root / tool_settings(car_root, "compile")["library_directory"]
+    (library / "outside.h").symlink_to(tmp_path / "outside.h")
+    with pytest.raises(ValueError, match="symlinks"):
+        stage_library(tmp_path / "sketch", car_root, tool_settings(car_root, "compile"))
 
 
 def test_unknown_name_does_not_prompt(car_root):
@@ -121,26 +149,19 @@ def test_compile_failure_propagates(car_root, failure):
     [{}, {"PIN": 1, "EXTRA": 2}, {"PIN": [1]}, {"PIN": float("inf")}, {"PIN": 2**40}],
 )
 def test_invalid_parameters(values):
-    settings = {
-        "build_directory": "system/arduino/build",
-        "header_filename": "generated.h",
-        "manifest_filename": "firmware.toml",
-        "command_timeout_seconds": 300,
-    }
-    firmware = {
+    metadata = {
         "version": "1.0.0",
         "protocol_version": 1,
         "fqbn": "arduino:avr:uno",
-        "required_parameters": ["PIN"],
-        "parameters": values,
     }
     with pytest.raises(ValueError):
-        validate_compile_configuration(settings, {"demo": firmware})
+        resolve_firmware(
+            {"firmware": metadata, "parameters": {"PIN": {"type": "integer"}}}, values
+        )
 
 
 def test_unknown_deployment_identity():
-    with (ROOT / "config.toml").open("rb") as stream:
-        settings = tomllib.load(stream)["firmware_flash"]
+    settings = tool_settings(ROOT, "flash")
     header = render_header(
         "demo", {"version": "1", "protocol_version": 1, "parameters": {}}, {}, settings
     )
@@ -192,14 +213,19 @@ def test_generated_identity_handler_compiles_with_available_avr_core(tmp_path):
         for item in platforms
     ):
         pytest.skip("Arduino AVR core is not installed on this development machine")
-    with (ROOT / "config.toml").open("rb") as stream:
-        settings = tomllib.load(stream)
+    settings = {
+        "firmware_compile": tool_settings(ROOT, "compile"),
+        "firmware_flash": tool_settings(ROOT, "flash"),
+    }
     sketch = tmp_path / "compile_smoke"
     sketch.mkdir()
     (sketch / "compile_smoke.ino").write_text(
         f'#include "{settings["firmware_compile"]["header_filename"]}"\n'
-        "void setup() { Serial.begin(DRIVION_SERIAL_BAUD_RATE); }\nvoid loop() { drivionHandleInfo(DRIVION_INFO_COMMAND); }\n"
+        '#include "src/DrivionFirmware/DrivionFirmware.h"\n'
+        "void setup() { Serial.begin(DRIVION_SERIAL_BAUD_RATE); }\n"
+        "void loop() { drivion::handleInfo(Serial, DRIVION_INFO_COMMAND, DRIVION_INFO_COMMAND, F(DRIVION_INFO_RESPONSE)); }\n"
     )
+    stage_library(sketch, ROOT, settings["firmware_compile"])
     (sketch / settings["firmware_compile"]["header_filename"]).write_text(
         render_header(
             "compile_smoke",

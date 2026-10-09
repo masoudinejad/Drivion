@@ -3,7 +3,6 @@
 import argparse
 import json
 import math
-import re
 import shutil
 import subprocess
 import sys
@@ -12,96 +11,13 @@ from pathlib import Path
 
 import tomllib
 
-from ..configuration import arduino_settings, arduino_toolchain_settings
-from ..ui.navigation import confirm
-from ..ui.progress import show_progress
-from .firmware import (
-    artifact_checksums,
-    firmware_identity,
-    validate_flash_configuration,
-)
-
-
-def validate_compile_configuration(settings, firmwares):
-    """Validate the shared TOML contract without requiring the car environment."""
-    if not isinstance(settings, dict) or not isinstance(firmwares, dict):
-        raise TypeError("Firmware configuration must contain TOML tables")
-    if set(settings) != {
-        "build_directory",
-        "header_filename",
-        "manifest_filename",
-        "command_timeout_seconds",
-    }:
-        raise ValueError("Configure exactly the supported firmware_compile settings")
-    if not isinstance(settings["build_directory"], str):
-        raise TypeError("Build directory must be a relative path string")
-    path = Path(settings["build_directory"])
-    if (
-        path.is_absolute()
-        or ".." in path.parts
-        or not path.is_relative_to("system/arduino")
-    ):
-        raise ValueError("Build directory must be inside system/arduino")
-    if not isinstance(settings["header_filename"], str) or not re.fullmatch(
-        r"[A-Za-z][A-Za-z0-9_]*\.h", settings["header_filename"]
-    ):
-        raise ValueError("Configure a safe generated header filename")
-    timeout = settings["command_timeout_seconds"]
-    if type(timeout) is not int or not 1 <= timeout <= 3600:
-        raise ValueError("Compile timeout must be between 1 and 3600 seconds")
-    if not isinstance(settings["manifest_filename"], str) or not re.fullmatch(
-        r"[A-Za-z][A-Za-z0-9_]*\.toml", settings["manifest_filename"]
-    ):
-        raise ValueError("Configure a safe build manifest filename")
-    for name, firmware in firmwares.items():
-        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name):
-            raise ValueError("Firmware names must be safe identifiers")
-        if not isinstance(firmware, dict) or set(firmware) != {
-            "version",
-            "protocol_version",
-            "fqbn",
-            "required_parameters",
-            "parameters",
-        }:
-            raise ValueError(f"Configure exactly the supported fields for {name}")
-        if (
-            not isinstance(firmware["version"], str)
-            or not firmware["version"].isascii()
-            or not firmware["version"].isprintable()
-            or not firmware["version"]
-        ):
-            raise ValueError("Firmware version must be non-empty printable text")
-        if (
-            type(firmware["protocol_version"]) is not int
-            or not 1 <= firmware["protocol_version"] < 2**32
-        ):
-            raise ValueError("Protocol version must be a positive integer")
-        if not isinstance(firmware["fqbn"], str) or not re.fullmatch(
-            r"[A-Za-z0-9_-]+:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+(?::[A-Za-z0-9_=,.-]+)?",
-            firmware["fqbn"],
-        ):
-            raise ValueError("Configure an explicit board FQBN")
-        required = firmware["required_parameters"]
-        values = firmware["parameters"]
-        if (
-            not isinstance(required, list)
-            or not isinstance(values, dict)
-            or any(
-                not isinstance(key, str)
-                or not re.fullmatch(r"[A-Z][A-Z0-9_]*", key)
-                or key.startswith("DRIVION_")
-                for key in required
-            )
-        ):
-            raise ValueError(
-                "Parameters must be uppercase identifiers, excluding DRIVION_ names"
-            )
-        if len(set(required)) != len(required) or set(required) != set(values):
-            raise ValueError(
-                f"Parameters for {name} must exactly match required_parameters"
-            )
-        for value in values.values():
-            c_literal(value)
+from ...information.update import INFO_PATH, publish
+from ...ui.navigation import confirm
+from ...ui.progress import show_progress
+from ..settings import load_context, require_disjoint
+from .artifacts import artifact_checksums
+from .definitions import load_firmware
+from .identity import firmware_identity
 
 
 def c_literal(value):
@@ -143,66 +59,52 @@ def render_header(name, firmware, software, flash_settings):
         "DRIVION_SOURCE_DIRTY": software.get("dirty", False),
         "DRIVION_SERIAL_BAUD_RATE": flash_settings["baud_rate"],
         "DRIVION_INFO_COMMAND": flash_settings["query_command"],
+        "DRIVION_INFO_RESPONSE": response,
     }
     lines = ["// Generated from TOML; do not edit.", "#pragma once"]
     for key, value in {**metadata, **firmware["parameters"]}.items():
         lines.append(f"#define {key} {c_literal(value)}")
-    # Call from the sketch's existing command dispatcher; never swallow motor
-    # commands by creating a separate reader competing for the serial stream.
-    lines.extend(
-        [
-            "#include <Arduino.h>",
-            "#include <string.h>",
-            "inline bool drivionHandleInfo(const char *command) {",
-            "  if (strcmp(command, DRIVION_INFO_COMMAND) != 0) return false;",
-            f"  Serial.println(F({c_literal(response)}));",
-            "  return true;",
-            "}",
-        ]
-    )
     return "\n".join(lines) + "\n"
 
 
-def compile_firmware(name, car_root=None):
+def stage_library(sketch, car_root, settings):
+    """Snapshot shared headers into Arduino's recursively compiled src directory."""
+    root = Path(car_root).resolve()
+    library = root / settings["library_directory"]
+    if library.is_symlink() or not library.resolve().is_relative_to(root):
+        raise ValueError("Firmware library must remain inside the car directory")
+    if not (library / "DrivionFirmware.h").is_file():
+        raise ValueError("Missing shared firmware identity library")
+    if any(path.is_symlink() for path in library.rglob("*")):
+        raise ValueError("Firmware library files must not be symlinks")
+    require_disjoint(library.resolve(), Path(sketch).resolve())
+    # Refuse collisions rather than replacing a sketch's own source files.
+    shutil.copytree(library, Path(sketch) / "src/DrivionFirmware")
+
+
+def compile_firmware(name, car_root=None, *, context=None):
     """Prepare an isolated sketch, confirm, and compile with visible progress.
 
     Return None on refusal; otherwise return the successful artifact directory.
     Failed builds retain CLI diagnostics through CalledProcessError. No source
     sketch is modified and no serial connection or upload is performed.
     """
-    root = Path(car_root or Path(__file__).parents[2]).resolve()
-    with (root / "config.toml").open("rb") as stream:
-        config = tomllib.load(stream)
-    settings, firmwares = config["firmware_compile"], config["firmware"]
-    validate_compile_configuration(settings, firmwares)
-    flash_settings = config["firmware_flash"]
-    validate_flash_configuration(flash_settings)
-    if name not in firmwares:
-        raise ValueError(f"Unknown firmware: {name}")
-    firmware = firmwares[name]
-    runtime, tools = arduino_settings(root), arduino_toolchain_settings(root)
-    sketchbook = (root / runtime.sketchbook_directory).resolve()
+    context = context or load_context(car_root)
+    root = context.root
+    settings, flash_settings = context.compile_settings, context.flash_settings
+    firmware = load_firmware(name, root, context=context)
+    sketchbook = context.directory(context.runtime.sketchbook_directory)
     source = (sketchbook / name).resolve()
-    builds = (root / settings["build_directory"]).resolve()
-    if (
-        not sketchbook.is_relative_to(root)
-        or not source.is_relative_to(sketchbook)
-        or not builds.is_relative_to(root)
-    ):
-        raise ValueError("Firmware paths must remain inside the car directory")
-    if (
-        builds == sketchbook
-        or builds.is_relative_to(sketchbook)
-        or sketchbook.is_relative_to(builds)
-    ):
-        raise ValueError("Build directory and sketchbook must not overlap")
+    builds = context.directory(settings["build_directory"])
+    if not source.is_relative_to(sketchbook):
+        raise ValueError("Firmware source must remain inside the sketchbook")
     if not (source / f"{name}.ino").is_file():
         raise ValueError(f"Missing primary sketch: {source / f'{name}.ino'}")
     if any(path.is_symlink() for path in source.rglob("*")):
         raise ValueError("Sketch files must not be symlinks")
     if (source / settings["header_filename"]).exists():
         raise ValueError("Generated header must not exist in the source sketch")
-    info = root / "system/info.toml"
+    info = root / INFO_PATH
     software = {}
     if info.is_file():
         with info.open("rb") as stream:
@@ -217,12 +119,11 @@ def compile_firmware(name, car_root=None):
     with show_progress(f"Compiling {name} {firmware['version']}"):
         staged = destination / name
         shutil.copytree(source, staged)
+        stage_library(staged, root, settings)
         (staged / settings["header_filename"]).write_text(header, encoding="utf-8")
         result = subprocess.run(
             [
-                tools.cli_executable_path,
-                "--config-file",
-                str(root.parent / tools.config_path),
+                *context.cli_command,
                 "compile",
                 "--fqbn",
                 firmware["fqbn"],
@@ -241,8 +142,6 @@ def compile_firmware(name, car_root=None):
         print(result.stderr, end="", file=sys.stderr)
     # Publish only after a successful compile with real output. Flashing reads
     # this snapshot, not the potentially changed live firmware configuration.
-    from ..information.update import publish
-
     manifest = {
         "firmware": firmware_identity(name, firmware, software),
         "board": {"fqbn": firmware["fqbn"]},

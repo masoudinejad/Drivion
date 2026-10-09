@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..arduino.management.menu import arduino_menu
 from ..information.view import system_info_page
 from ..ui.navigation import select_item, show_page
 
@@ -18,7 +19,10 @@ class MenuItem:
 
 def default_items():
     """Register implemented categories; add future setup/settings/admin here."""
-    return (MenuItem("System Info", system_info_page),)
+    return (
+        MenuItem("System Info", system_info_page),
+        MenuItem("Arduino", arduino_menu),
+    )
 
 
 def run_management(car_root, *, items=None, select=select_item, display=show_page):

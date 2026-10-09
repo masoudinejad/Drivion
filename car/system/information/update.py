@@ -12,7 +12,7 @@ from pathlib import Path
 
 import tomllib
 
-from ..arduino.discover import compact_report, discover, retain_firmware_info
+from ..arduino.device.discovery import compact_report, discover, retain_firmware_info
 from ..configuration import network_settings
 
 INFO_PATH = Path("system/info.toml")

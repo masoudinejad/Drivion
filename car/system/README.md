@@ -31,7 +31,7 @@ should not be edited. Inspect it with `cat ~/car/system/info.toml` on the Pi.
 Open the central menu from the car directory (Python 3.11 or newer):
 
 ```sh
-python3 system/manage.py
+./system/manage.py
 ```
 
 It can also be launched by absolute path from any working directory. Use an
@@ -42,8 +42,9 @@ and shows all software, hardware, system, and network fields using the shared
 UI theme. Scroll the terminal to inspect long output and press Enter to return.
 Missing or malformed information is displayed as an error page, after which
 the menu remains usable. This view reads the published snapshot; it does not
-refresh hardware information or change configuration. No root access or car
-Python environment is needed.
+refresh hardware information or change configuration. No root access is needed.
+The executable launcher enters the configured car
+Python environment automatically. Provision it with Ansible before launching.
 
 `manage.py` is the entry point. `management/application.py` owns navigation and
 the `MenuItem` registry; `ui/navigation.py` adapts the existing Bash menu and
@@ -54,3 +55,58 @@ the car root and register a `MenuItem` in `default_items()`. Actions may compose
 submenus with the same UI helpers. Only implemented categories appear in the
 menu. Future configurable behavior belongs in `car/config.toml`; styling stays
 in `ui/theme.toml`.
+
+## Arduino management
+
+The executable launcher selects the car Python environment from `config.toml`:
+
+```sh
+./system/manage.py
+```
+
+Open **Arduino → Identify and select device**. Discovery runs with the shared
+waiting indicator and lists every connected port, including unidentified USB
+adapters. Select a device to save its address to `arduino.address` through the
+validated, atomic config modifier. Back leaves configuration unchanged. The
+connection and USB properties are checked again before saving; a disconnected
+or changed device requires another scan. Without a USB serial number, adapters
+sharing an address and VID/PID cannot be distinguished reliably.
+
+The result page shows observed device specifications and board candidates.
+Sketchbook location remains a user setting; board FQBN and bootloader choices
+remain specific to each firmware and are not inferred from USB discovery.
+Comments and unrelated settings in `config.toml` are preserved. Applications
+must reload configuration to see the selected address. A later code sync mirrors
+the local config over the Pi's copy, so preserve the desired address locally
+before syncing again. This operation does not compile, flash, or reset a board.
+
+An empty `arduino.address = ""` means no device has been selected yet.
+Identification still lists connected devices; selecting one saves its address.
+Flashing requires a selected address or an unambiguous `auto` target.
+
+### Change Arduino firmware
+
+Open **Arduino → Change firmware** to list firmware registrations from the
+central `[firmware]` TOML table. Parameter values come from that table; versions,
+board FQBNs and required parameter contracts come from each sketch's own
+`firmware.toml`. Build/serial settings live in system tool metadata TOML.
+Select one to run the existing compile procedure and then flash its returned
+artifact directory using the existing verified-flash procedure. Each step keeps
+its confirmation and progress UI. Back or a refused confirmation stops the
+workflow; failed compilation never triggers uploading. Missing sketches and
+invalid settings are reported without uploading.
+
+Successful completion displays the artifact and flash-log paths after verifying
+the running firmware identity. Failed uploads or verification show an error and
+retain the existing detailed logs. Operations return to the Arduino submenu.
+See [Arduino instructions](arduino/README.md) for firmware registration,
+sketch integration, and the compile/flash contracts.
+
+### Check running Arduino firmware
+
+Open **Arduino → Check firmware** to query the selected device using the existing
+firmware-check procedure. Its confirmation and waiting indicators are preserved.
+The result page shows the reported identity or query error and observation time;
+Enter returns to the Arduino submenu. Declining confirmation returns directly.
+This updates system information using the check procedure; it does not compile
+or upload. A reported identity is not verification against a compiled build.

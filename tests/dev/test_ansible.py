@@ -1,7 +1,10 @@
 """Validate Ansible target selection and password handling without a live Pi."""
 
 import json
+import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
@@ -9,6 +12,40 @@ import pytest
 import tomllib
 
 from dev.ansible import run
+
+
+def test_protected_service_module_set_imports_without_car_dependencies(tmp_path):
+    """Validate that Ansible deploys every dependency needed by root boot services."""
+    import yaml
+
+    tasks = yaml.safe_load((run.ROOT / "dev/ansible/tasks/network.yml").read_text())
+    modules = next(
+        task["loop"]
+        for task in tasks
+        if task["name"] == "Install the protected Drivion service modules"
+    )
+    for module in modules:
+        destination = tmp_path / "system" / module["destination"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(run.ROOT / "car/system" / module["source"], destination)
+    subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            (
+                "from system.information.update import collect_info; "
+                "from system.arduino.device.discovery import discover; "
+                "from system.network.fallback import activate_fallback"
+            ),
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)},
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
 
 def test_inventory_reuses_ssh_settings_without_password(tmp_path):

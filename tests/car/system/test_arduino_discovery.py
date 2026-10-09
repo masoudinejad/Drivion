@@ -7,7 +7,39 @@ from unittest.mock import patch
 
 import tomllib
 
-from car.system.arduino.discover import compact_report, discover, retain_firmware_info
+from car.system.arduino.device.discovery import (
+    compact_report,
+    discover,
+    retain_firmware_info,
+)
+
+
+def test_lightweight_discovery_avoids_core_and_board_detail_commands(tmp_path):
+    import shutil
+
+    root = Path(__file__).resolve().parents[3] / "car"
+    shutil.copy(root / "config.toml", tmp_path)
+    (tmp_path / "system").mkdir()
+    shutil.copy(root / "system/pyproject.toml", tmp_path / "system")
+    listing = {
+        "detected_ports": [
+            {
+                "port": {"address": "/dev/ttyUSB0", "protocol": "serial"},
+                "matching_boards": [{"fqbn": "arduino:avr:nano"}],
+            }
+        ]
+    }
+    with patch(
+        "car.system.arduino.device.discovery.subprocess.run",
+        return_value=subprocess.CompletedProcess([], 0, json.dumps(listing), ""),
+    ) as run:
+        report = discover(tmp_path, detailed=False)
+    assert run.call_count == 1
+    assert "core" not in run.call_args.args[0]
+    assert report["ports"][0]["identification"] == "candidate"
+    assert "cores" not in report
+
+
 from car.system.information.update import render_info
 
 ROOT = Path(__file__).resolve().parents[3] / "car"
@@ -72,7 +104,7 @@ def test_candidates_unknown_ports_and_nested_metadata():
         "optional": None,
     }
     with patch(
-        "car.system.arduino.discover.subprocess.run",
+        "car.system.arduino.device.discovery.subprocess.run",
         side_effect=[
             response(listing),
             response({"platforms": [{"id": "arduino:avr", "installed": "1.8.6"}]}),
@@ -97,7 +129,7 @@ def test_candidates_unknown_ports_and_nested_metadata():
 
 def test_cli_unavailable_does_not_claim_no_boards():
     with patch(
-        "car.system.arduino.discover.subprocess.run",
+        "car.system.arduino.device.discovery.subprocess.run",
         side_effect=FileNotFoundError("missing CLI"),
     ):
         report = discover(ROOT)
@@ -151,7 +183,7 @@ def test_detail_failure_retains_port():
         ]
     }
     with patch(
-        "car.system.arduino.discover.subprocess.run",
+        "car.system.arduino.device.discovery.subprocess.run",
         side_effect=[
             response(listing),
             response({"platforms": []}),
@@ -168,7 +200,7 @@ def test_single_port_is_selected_automatically():
         "detected_ports": [{"port": {"address": "/dev/ttyUSB0"}, "matching_boards": []}]
     }
     with patch(
-        "car.system.arduino.discover.subprocess.run",
+        "car.system.arduino.device.discovery.subprocess.run",
         side_effect=[response(listing), response({"platforms": []})],
     ):
         report = discover(ROOT)
@@ -185,9 +217,31 @@ def test_malformed_nested_cli_output_is_reported():
         ]
     }
     with patch(
-        "car.system.arduino.discover.subprocess.run",
+        "car.system.arduino.device.discovery.subprocess.run",
         return_value=response(listing),
     ):
         report = discover(ROOT)
     assert report["status"] == "error"
     assert "matching_boards" in report["error"]
+
+
+def test_unconfigured_address_still_discovers_without_selecting(tmp_path):
+    from car.src.config import update_config
+    from car.system.arduino.device.discovery import format_summary
+
+    (tmp_path / "config.toml").write_text((ROOT / "config.toml").read_text())
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system/pyproject.toml").write_text(
+        (ROOT / "system/pyproject.toml").read_text()
+    )
+    update_config("arduino.address", "", tmp_path / "config.toml")
+    listing = {"detected_ports": [{"port": {"address": "/dev/ttyUSB0"}}]}
+    with patch(
+        "car.system.arduino.device.discovery.subprocess.run",
+        side_effect=[response(listing), response({"platforms": []})],
+    ):
+        report = discover(tmp_path)
+    assert report["status"] == "ok"
+    assert report["selection"]["status"] == "unconfigured"
+    assert report["ports"][0]["port"]["address"] == "/dev/ttyUSB0"
+    assert "not configured" in format_summary(report)

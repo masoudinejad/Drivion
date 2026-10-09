@@ -14,6 +14,11 @@ from pathlib import Path
 
 import tomllib
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from car.system.arduino.settings import validate_directory
+
 if __package__:
     from . import versioning
 else:
@@ -38,19 +43,13 @@ def tool_settings():
         raise TypeError("Configure sync exclusions as non-empty strings")
     # Preserve generated Pi-side builds/logs even with rsync --delete. Paths
     # follow the car's central TOML rather than duplicated sync configuration.
-    with (CAR_DIR / "config.toml").open("rb") as stream:
-        car_config = tomllib.load(stream)
+    with (CAR_DIR / "system/pyproject.toml").open("rb") as stream:
+        car_config = tomllib.load(stream)["tool"]["drivion"]
     for section, key in (
         ("firmware_compile", "build_directory"),
         ("firmware_flash", "log_directory"),
     ):
-        path = Path(car_config[section][key])
-        if (
-            path.is_absolute()
-            or ".." in path.parts
-            or not path.is_relative_to("system/arduino")
-        ):
-            raise ValueError("Configure safe Arduino generated-file paths before sync")
+        path = validate_directory(car_config[section][key], key)
         excludes.append(f"/{path.as_posix()}/")
     return timeout, tuple(excludes)
 

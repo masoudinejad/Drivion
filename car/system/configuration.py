@@ -174,15 +174,17 @@ def _safe_relative_path(value, label):
     return path
 
 
-def arduino_settings(car_root):
+def arduino_settings(car_root, *, values=None):
     """Read the two user-configurable Arduino settings."""
     settings = _exact_settings(
-        ArduinoSettings, _config_table(car_root, "arduino"), "arduino"
+        ArduinoSettings,
+        _config_table(car_root, "arduino") if values is None else values,
+        "arduino",
     )
     if (
         not isinstance(settings.address, str)
-        or not 1 <= len(settings.address) <= 255
-        or not settings.address.isprintable()
+        or len(settings.address) > 255
+        or (settings.address and not settings.address.isprintable())
     ):
         raise ValueError("Configure a printable arduino.address")
     sketchbook = _safe_relative_path(
@@ -193,11 +195,11 @@ def arduino_settings(car_root):
     return settings
 
 
-def arduino_toolchain_settings(car_root):
+def arduino_toolchain_settings(car_root, *, values=None):
     """Read pinned Arduino toolchain metadata from project TOML."""
     settings = _exact_settings(
         ArduinoToolchainSettings,
-        _tool_table(car_root, "arduino"),
+        _tool_table(car_root, "arduino") if values is None else values,
         "tool.drivion.arduino",
     )
     for name in ("cli_version", "avr_core_version"):

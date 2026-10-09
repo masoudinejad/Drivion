@@ -24,7 +24,7 @@ def test_repository_config_loads():
     assert config.system.network.fallback_ipv4_address == "10.42.0.1"
     assert config.system.network.fallback_delay_seconds == 60
     assert config.arduino.address == "auto"
-    assert config.arduino.sketchbook_directory == "system/arduino/code"
+    assert config.arduino.sketchbook_directory == "system/arduino/sketches"
     assert config.camera.jpeg_quality == 95
     assert config.camera.buffer_count == 4
 

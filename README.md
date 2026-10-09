@@ -11,8 +11,7 @@ car/
   config.toml            Central car settings
   src/                   Driving application modules
   system/                Setup, updates, and the car Python environment
-    arduino/code/        Arduino CLI sketchbook and Nano C/C++ firmware
-    arduino/scripts/     Build and flash tools run on the Pi
+    arduino/             Arduino tooling, firmware sources, and management UI
 model_development/       Training and evaluation; independent uv project
 dev/                     Development utilities; independent uv project
   sync/                  Raspberry Pi code sync and SSH setup

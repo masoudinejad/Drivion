@@ -8,7 +8,7 @@ from pathlib import Path
 
 import tomllib
 
-from ..configuration import arduino_settings, arduino_toolchain_settings
+from ...configuration import arduino_settings, arduino_toolchain_settings
 
 
 def _without_nulls(value):
@@ -46,6 +46,8 @@ def _validate_ports(value):
 
 
 def _select_address(ports, configured):
+    if not configured:
+        return {"status": "unconfigured", "configured_address": configured}
     addresses = [detected["port"]["address"] for detected in ports]
     if configured == "auto":
         if len(addresses) == 1:
@@ -59,17 +61,23 @@ def _select_address(ports, configured):
     return {"status": "missing", "configured_address": configured}
 
 
-def discover(car_root, config_root=None):
+def discover(car_root, config_root=None, *, detailed=True, context=None):
     """Return observed ports, candidate boards, and installed core metadata.
 
     Board details describe a core's available options, not measured processor or
     bootloader settings. Multiple matches remain candidates; unknown USB serial
     adapters remain unidentified. Individual detail failures retain port data.
+    Set detailed=False for target checks that need only the board-list command.
+    A supplied context reuses an operation's central configuration snapshot.
     """
     car_root = Path(car_root)
     config_root = Path(config_root) if config_root is not None else car_root
-    runtime = arduino_settings(config_root)
-    toolchain = arduino_toolchain_settings(config_root)
+    runtime = context.runtime if context is not None else arduino_settings(config_root)
+    toolchain = (
+        context.toolchain
+        if context is not None
+        else arduino_toolchain_settings(config_root)
+    )
     wait = toolchain.discovery_timeout_seconds
     timeout = toolchain.command_timeout_seconds
     cli_config = (
@@ -107,6 +115,12 @@ def discover(car_root, config_root=None):
     report = {"status": "ok", "selection": selection, "ports": ports}
     if selection["status"] in ("ambiguous", "missing"):
         report["status"] = "partial"
+    for port in ports:
+        port["identification"] = (
+            "candidate" if port.get("matching_boards") else "unidentified"
+        )
+    if not detailed:
+        return report
     try:
         report["cores"] = query("core", "list")
     except errors as error:
@@ -115,7 +129,6 @@ def discover(car_root, config_root=None):
     details = {}
     for port in ports:
         candidates = port.get("matching_boards", [])
-        port["identification"] = "unidentified" if not candidates else "candidate"
         for board in candidates:
             fqbn = board.get("fqbn")
             if not fqbn:
@@ -135,6 +148,42 @@ def discover(car_root, config_root=None):
                     report["status"] = "partial"
             board["specifications"] = details[fqbn]
     return report
+
+
+def selected_port(report, fqbn=None):
+    """Require one serial target; reject board mismatches when an FQBN is given."""
+    selection = report.get("selection", {})
+    if selection.get("status") != "selected":
+        raise ValueError(
+            "No unique target; connect the Arduino and configure arduino.address"
+        )
+    matches = [
+        item
+        for item in report["ports"]
+        if item["port"]["address"] == selection["address"]
+    ]
+    if len(matches) != 1 or matches[0]["port"].get("protocol") != "serial":
+        raise ValueError("Firmware operations require a uniquely selected serial port")
+    candidates = {
+        ":".join(board["fqbn"].split(":")[:3])
+        for board in matches[0].get("matching_boards", [])
+        if board.get("fqbn")
+    }
+    if (
+        fqbn is not None
+        and candidates
+        and ":".join(fqbn.split(":")[:3]) not in candidates
+    ):
+        raise ValueError("Selected board candidates do not match the compiled target")
+    return matches[0]
+
+
+def recheck_target(report, target, fqbn=None):
+    """Require the same serial device after confirmation, before hardware I/O."""
+    current = selected_port(report, fqbn)
+    if current["port"] != target["port"]:
+        raise ValueError("Arduino target changed after approval; confirm again")
+    return current
 
 
 def compact_report(report):
@@ -187,6 +236,10 @@ def format_summary(report):
     selection = report.get("selection", {})
     if selection.get("status") == "selected":
         lines.append(f"Selected address: {selection['address']}")
+    elif selection.get("status") == "unconfigured":
+        lines.append(
+            "Address selection: not configured; select a device in system management"
+        )
     elif selection.get("status") == "ambiguous":
         lines.append("Address selection: multiple ports; configure arduino.address")
     elif selection.get("status") == "missing":
@@ -222,8 +275,8 @@ def retain_firmware_info(current, previous):
     """Preserve last-observed firmware only for the same USB identity and address.
 
     Discovery does not open/reset the board to re-query firmware. Cached fields
-    keep their observation timestamp; a previous verified result becomes
-    last_verified on refresh. Adapters without serial numbers cannot distinguish
+    keep their observation timestamp; verified/reported results become
+    last_verified/last_reported on refresh. Adapters without serial numbers cannot distinguish
     replacement boards sharing VID/PID and address, so this is historical data.
     """
     previous_ports = previous.get("ports", [previous])
@@ -247,6 +300,8 @@ def retain_firmware_info(current, previous):
             )
             if port.get("firmware_status") == "verified":
                 port["firmware_status"] = "last_verified"
+            elif port.get("firmware_status") == "reported":
+                port["firmware_status"] = "last_reported"
     return current
 
 
@@ -263,7 +318,7 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     # Import here to keep discovery usable by the information collector.
-    from ..information.update import INFO_PATH, publish
+    from ...information.update import INFO_PATH, publish
 
     try:
         path = args.car_root / INFO_PATH

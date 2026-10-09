@@ -118,13 +118,13 @@ class SystemConfig(ConfigModel):
 class ArduinoConfig(ConfigModel):
     """User-selected Arduino port and repository sketchbook location."""
 
-    address: str = Field(min_length=1, max_length=255)
+    address: str = Field(max_length=255)
     sketchbook_directory: str
 
     @field_validator("address")
     @classmethod
     def printable_address(cls, value):
-        if not value.isprintable():
+        if value and not value.isprintable():
             raise ValueError("must contain printable characters")
         return value
 
@@ -149,8 +149,6 @@ class AppConfig(ConfigModel):
 
     system: SystemConfig
     arduino: ArduinoConfig
-    firmware_compile: dict[str, object]
-    firmware_flash: dict[str, object]
     firmware: dict[str, dict[str, object]]
     camera: CameraConfig
     joystick: EmptyConfig = Field(default_factory=EmptyConfig)
@@ -161,12 +159,10 @@ class AppConfig(ConfigModel):
 
     @model_validator(mode="after")
     def valid_firmware_configuration(self):
-        from car.system.arduino.compile import validate_compile_configuration
-        from car.system.arduino.firmware import validate_flash_configuration
+        from car.system.arduino.firmware.definitions import validate_parameter_values
 
         try:
-            validate_compile_configuration(self.firmware_compile, self.firmware)
-            validate_flash_configuration(self.firmware_flash)
+            validate_parameter_values(self.firmware)
         except TypeError as error:
             raise ValueError(str(error)) from error
         return self

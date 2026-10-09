@@ -124,6 +124,7 @@
     - "{{ service_library_directory }}/system/information"
     - "{{ service_library_directory }}/system/network"
     - "{{ service_library_directory }}/system/arduino"
+    - "{{ service_library_directory }}/system/arduino/device"
     - "{{ service_configuration_directory }}"
     - "{{ service_configuration_directory }}/system"
 
@@ -158,12 +159,20 @@
       destination: information/update.py
     - source: arduino/__init__.py
       destination: arduino/__init__.py
-    - source: arduino/discover.py
-      destination: arduino/discover.py
+    - source: arduino/device/__init__.py
+      destination: arduino/device/__init__.py
+    - source: arduino/device/discovery.py
+      destination: arduino/device/discovery.py
     - source: network/__init__.py
       destination: network/__init__.py
     - source: network/fallback.py
       destination: network/fallback.py
+
+- name: Remove the superseded protected Arduino discovery module
+  # The discovery implementation moved into the device package.
+  ansible.builtin.file:
+    path: "{{ service_library_directory }}/system/arduino/discover.py"
+    state: absent
 
 - name: Install the system information service
   ansible.builtin.template:
