@@ -71,3 +71,29 @@ def test_launcher_enters_environment_from_another_directory(tmp_path):
         check=True,
     )
     assert result.stdout.strip() == str(target)
+
+
+def test_manage_executable_enters_environment_from_another_directory(tmp_path):
+    root = tmp_path / "car"
+    root.mkdir()
+    configure(root)
+    source = Path(__file__).resolve().parents[3] / "car/system"
+    shutil.copytree(
+        source,
+        root / "system",
+        ignore=shutil.ignore_patterns("env", "__pycache__", "uv.lock"),
+    )
+    target = environment_path(root)
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(target)], check=True
+    )
+    launcher = root / "system/manage.py"
+    launcher.write_text(
+        launcher.read_text().replace(
+            "        run_management(CAR_ROOT)", "        print(sys.prefix)"
+        )
+    )
+    result = subprocess.run(
+        [str(launcher)], cwd=tmp_path, text=True, capture_output=True, check=True
+    )
+    assert result.stdout.strip() == str(target)

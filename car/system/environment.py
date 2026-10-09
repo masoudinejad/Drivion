@@ -1,5 +1,7 @@
 """Resolve the central configuration's named Python environment."""
 
+import os
+import sys
 from pathlib import Path
 
 if __package__:
@@ -17,9 +19,27 @@ def environment_path(car_root):
     return target
 
 
-if __name__ == "__main__":
-    import sys
+def enter_environment(car_root, entry_point):
+    """Re-execute a launcher with the centrally configured Python environment."""
+    target = environment_path(car_root)
+    if Path(sys.prefix).resolve() == target:
+        return
+    python = target / "bin/python"
+    if not python.is_file():
+        raise ValueError(
+            "The car environment is missing. Run Ansible provisioning first."
+        )
+    environment = os.environ.copy()
+    environment.pop("PYTHONHOME", None)
+    environment.pop("PYTHONPATH", None)
+    os.execve(
+        str(python),
+        [str(python), str(Path(entry_point).resolve()), *sys.argv[1:]],
+        environment,
+    )
 
+
+if __name__ == "__main__":
     try:
         print(environment_path(sys.argv[1]))
     except (KeyError, OSError, TypeError, ValueError) as error:
