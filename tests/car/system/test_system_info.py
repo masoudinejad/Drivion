@@ -3,11 +3,20 @@
 import subprocess
 from unittest.mock import patch
 
+import pytest
 import tomllib
 
 from car.system import configuration
 from car.system.information import update as system_info
 from car.system.network import fallback as wifi_fallback
+
+
+@pytest.fixture(autouse=True)
+def mock_discovery():
+    with patch.object(
+        system_info, "discover", return_value={"status": "ok", "ports": []}
+    ):
+        yield
 
 
 def config(root):
