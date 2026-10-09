@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Typed input UI. Only a validated answer is written to stdout.
 
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/theme.sh"
+
 drivion_prompt() (
     local question="" type=text answer="" key sequence error="" valid normalized
     local saved_state rows columns width display
-    local cyan=$'\033[36m' amber=$'\033[33m' red=$'\033[31m'
-    local bold=$'\033[1m' dim=$'\033[2m' reset=$'\033[0m'
+    local cyan amber red green gray bold dim reset
+    drivion_load_theme || return 2
 
     while (( $# )); do
         case "$1" in
@@ -49,9 +51,6 @@ drivion_prompt() (
     trap 'exit 129' HUP
     if ! stty -echo -icanon -isig min 1 time 0 <&3; then return 2; fi
     printf '\033[?1049h' >&3
-    if [[ -n ${NO_COLOR+x} ]]; then
-        cyan="" amber="" red="" bold="" dim="" reset=""
-    fi
 
     while :; do
         read -r rows columns < <(stty size <&3)
@@ -103,10 +102,10 @@ drivion_prompt() (
                     boolean)
                         normalized=$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')
                         case "$normalized" in
-                            yes|true) normalized=true; valid=1 ;;
-                            no|false) normalized=false; valid=1 ;;
+                            y|yes|true) normalized=true; valid=1 ;;
+                            n|no|false) normalized=false; valid=1 ;;
                         esac
-                        error='Please enter yes/no or true/false.'
+                        error='Please enter yes/no, y/n, or true/false.'
                         ;;
                 esac
                 if (( valid )); then printf '%s\n' "$normalized"; return 0; fi

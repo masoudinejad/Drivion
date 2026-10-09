@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Reusable selection UI. Terminal interaction stays on /dev/tty; stdout is data.
 
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/theme.sh"
+
 drivion_menu() (
     local title="Select an option" option key sequence saved_state=""
     local selected=0 first=0 count rows columns visible index last label
-    local cyan=$'\033[36m' bold=$'\033[1m' dim=$'\033[2m' reset=$'\033[0m'
-    local amber=$'\033[33m'
+    local cyan amber red green gray bold dim reset
     local -a options=()
+    drivion_load_theme || return 2
 
     while (( $# )); do
         case "$1" in
@@ -62,9 +64,6 @@ drivion_menu() (
         return 2
     fi
     printf '\033[?1049h\033[?25l' >&3
-    if [[ -n ${NO_COLOR+x} ]]; then
-        cyan="" amber="" bold="" dim="" reset=""
-    fi
     count=${#options[@]}
 
     while :; do

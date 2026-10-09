@@ -4,6 +4,19 @@ import os
 import shutil
 import sys
 
+from .progress import run_background
+from .theme import load_theme
+
+
+def _prepare_banner():
+    """Render the title after entering the car environment, fitting its width."""
+    from art import text2art
+
+    banner = text2art("DRIVION", font="small", space=2).rstrip().splitlines()
+    if max(map(len, banner)) + 2 <= shutil.get_terminal_size().columns:
+        return banner
+    return ["DRIVION"]
+
 
 def show_startup():
     """Show startup results, using plain text when output is redirected."""
@@ -11,20 +24,14 @@ def show_startup():
     if interactive:
         print("\033[2J\033[H", end="", flush=True)
     styled = interactive and "NO_COLOR" not in os.environ
+    theme = load_theme(styled)
     bold, dim, cyan, green, gray, reset = (
-        ("\033[1m", "\033[2m", "\033[36m", "\033[32m", "\033[90m", "\033[0m")
-        if styled
-        else ("", "", "", "", "", "")
+        theme[name] for name in ("bold", "dim", "cyan", "green", "gray", "reset")
     )
     mark = "✓" if styled else "[ok]"
     lines = ["DRIVION"]
     if interactive:
-        # Load car dependencies only after drive.py enters its Python environment.
-        from art import text2art
-
-        banner = text2art("DRIVION", font="small", space=2).rstrip().splitlines()
-        if max(map(len, banner)) + 2 <= shutil.get_terminal_size().columns:
-            lines = banner
+        lines = run_background("Preparing Drivion", _prepare_banner, stream=sys.stdout)
     print()
     rule = "─" if interactive else "-"
     subtitle = "Autonomous driving system"

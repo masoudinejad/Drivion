@@ -24,7 +24,8 @@ two extra spaces between characters.
 
 `menu.sh` is a reusable Bash selection menu with arrow-key navigation and an
 always-visible Back option. It requires an interactive ANSI terminal, including
-an SSH terminal. It uses standard Bash and stty, with no Python dependencies.
+an SSH terminal. It uses Bash and stty for interaction and Python 3.11 or newer
+to load the shared TOML theme.
 
 From the car directory:
 
@@ -80,7 +81,7 @@ fi
 Or source `system/ui/prompt.sh` and call `drivion_prompt` with the same arguments.
 Supported types are `text` (default, non-blank), `integer` (optional sign),
 `number` (decimal or scientific notation), and `boolean`. Boolean input accepts
-yes/no and true/false without case sensitivity, returning `true` or `false`.
+yes/no, y/n, and true/false without case sensitivity, returning `true` or `false`.
 Other answers are returned unchanged; numeric validation checks syntax, not
 hardware limits or ranges. Numeric input must not contain surrounding spaces.
 
@@ -88,3 +89,74 @@ Only valid answers go to stdout. Ignore returns no answer and status 3;
 Ctrl-C returns 130; errors return another nonzero status. Enter submits,
 Backspace edits, and Ctrl-U clears input. Arrow keys are ignored. Terminal state
 and the previous screen are restored on exit. `NO_COLOR=1` disables styling.
+
+## Confirmation
+
+`confirm.sh` provides `drivion_confirm --question "Continue?"` when sourced,
+or can be run with Bash. It reuses the prompt's cyan input, amber Ignore,
+and dim keyboard hints. Type yes/no or y/n in any letter case and press Enter.
+Invalid or empty input asks again. Yes returns status 0, No or Escape/Ignore
+returns 1, Ctrl-C returns
+130, and terminal or argument errors return 2. No answer is written to stdout.
+
+```bash
+source ./system/ui/confirm.sh
+if drivion_confirm --question "Apply the update?"; then
+    printf 'Confirmed\n'
+fi
+```
+
+## Work in progress
+
+`progress.sh` provides `drivion_progress` when sourced. It runs a command with
+a cyan spinner and dim message until the command finishes, preserving its
+exit status and output. Use it for non-interactive work; interactive commands
+should use the menu or prompt directly. Feedback goes to stderr. Redirected
+output and `TERM=dumb` get one plain line; `NO_COLOR` removes styling.
+
+```bash
+bash ./system/ui/progress.sh --message "Checking environment" -- \
+    python3 ./system/verify_environment.py
+```
+
+Python callers can use `show_progress` from `system.ui.progress` as a context
+manager around work, including waiting for a background future:
+
+```python
+with show_progress("Loading configuration"):
+    configuration = load_configuration()
+```
+
+The spinner stops and clears its line on success or failure, and exceptions
+propagate to the caller.
+
+`run_background(message, operation, *args, **kwargs)` runs a callable in a
+worker thread, displays progress, and returns its result or propagates its
+exception. Operations must avoid writing to the progress stream. The initial
+startup banner uses this helper to prepare its ASCII title in the background;
+its rendering function contains no animation logic or forced delay.
+
+## Shared theme
+
+`theme.toml` is the single source of ANSI colors and text styles. Python uses
+`theme.py`; Bash uses `theme.sh` to load the same validated palette with Python
+3.11 or newer. Edit the TOML file to change the appearance of menus, prompts,
+confirmations, progress indicators, and the startup banner together.
+`NO_COLOR` continues to disable styling across all elements.
+
+## Raspberry Pi UI walkthrough
+
+Run the single interactive test file from the deployed car directory using the
+provisioned Python environment (which includes `art`):
+
+```bash
+./system/env/drivion/bin/python ./system/ui/test_ui.py
+```
+
+The walkthrough shows the startup banner, background and command progress,
+menu, confirmation, and each typed prompt. It reports answers and exit statuses
+and performs no hardware or configuration changes. Try arrows, Enter, Escape,
+invalid input, and editing keys; Ctrl-C cancels the walkthrough. The two progress
+demonstrations each wait two seconds so the spinner can be inspected.
+Run again with `NO_COLOR=1` to check the unstyled appearance. If the environment
+path in `config.toml` was customized, use that environment's Python instead.

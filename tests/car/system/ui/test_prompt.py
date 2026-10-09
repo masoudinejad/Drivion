@@ -91,6 +91,19 @@ class PromptTests(unittest.TestCase):
         self.assertIn(b"RESULT=true STATUS=0", self.run_prompt(b"YeS\r", "boolean"))
         self.assertIn(b"RESULT=false STATUS=0", self.run_prompt(b"no\r", "boolean"))
 
+    def test_boolean_short_forms_and_case(self):
+        for answer, expected in [
+            ("y", "true"),
+            ("Y", "true"),
+            ("YES", "true"),
+            ("n", "false"),
+            ("N", "false"),
+            ("NO", "false"),
+        ]:
+            with self.subTest(answer=answer):
+                output = self.run_prompt((answer + "\r").encode(), "boolean")
+                self.assertIn(f"RESULT={expected} STATUS=0".encode(), output)
+
     def test_blank_retry(self):
         output = self.run_prompt(b"\rhello\r")
         self.assertIn(b"Please enter non-empty text", output)

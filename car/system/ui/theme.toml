@@ -1,0 +1,10 @@
+# Shared ANSI SGR palette for every terminal UI element.
+[styles]
+cyan = 36 # Selection, title, and progress
+amber = 33 # Back and Ignore
+red = 31 # Validation errors
+green = 32 # Success
+gray = 90 # Banner borders
+bold = 1
+dim = 2
+reset = 0
