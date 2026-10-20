@@ -164,7 +164,11 @@ def test_joystick_submenu_dispatch_and_back(tmp_path, monkeypatch):
 
     def select(title, labels):
         assert title == "Joystick"
-        assert labels == ["Identify and select device", "Configure controls"]
+        assert labels == [
+            "Identify and select device",
+            "Configure controls",
+            "Check controls",
+        ]
         return next(choices)
 
     joystick.joystick_menu(tmp_path, select=select)

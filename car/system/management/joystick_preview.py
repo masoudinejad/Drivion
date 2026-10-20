@@ -2,21 +2,11 @@
 
 import os
 import select
-import shutil
 import termios
 import time
 import tty
 
-from ..ui.screen import terminal_screen
-from ..ui.theme import load_theme
-
-
-def control_bar(value, half_width):
-    """Draw a signed bar around neutral; only the active side is filled."""
-    count = round(min(1.0, abs(value)) * half_width)
-    left = " " * (half_width - count) + "#" * count if value < 0 else " " * half_width
-    right = "#" * count + " " * (half_width - count) if value > 0 else " " * half_width
-    return f"[{left}|{right}]"
+from ..ui.drive_monitor import DriveMonitor
 
 
 def preview_loop(
@@ -69,65 +59,35 @@ def preview_controls(joystick, controls, settings):
         open("/dev/tty", "w", encoding="utf-8", buffering=1) as terminal,
     ):
         saved = termios.tcgetattr(reader.fileno())
-        theme = load_theme("NO_COLOR" not in os.environ)
+        monitor = DriveMonitor(
+            allow_reverse=controls.allow_reverse,
+            speed_mode=controls.speed_mode,
+            steering_mode=controls.steering_mode,
+            stream=terminal,
+        )
 
         def draw(current, speed_tested, steering_tested, inactive):
-            width = max(2, min(20, (shutil.get_terminal_size().columns - 5) // 2))
-            speed_direction = (
-                "Forward"
-                if current.speed > 0
-                else "Backward"
-                if current.speed < 0
-                else "Stopped"
-            )
-            steering_direction = (
-                "Right"
-                if current.steering > 0
-                else "Left"
-                if current.steering < 0
-                else "Centre"
-            )
-            lines = [
-                f"{theme['bold']}Check joystick controls{theme['reset']}",
-                "",
-                "Move LEFT stick up/down for speed.",
-                "Move RIGHT stick left/right for steering.",
-                "Preview only: the car is not driven.",
-                "",
-                f"Speed: {current.speed:+.2f} {speed_direction}",
-                f"{theme['cyan']}{control_bar(current.speed, width)}{theme['reset']}",
-                "Backward (-) / Forward (+)",
-                "",
-                f"Steering: {current.steering:+.2f} {steering_direction}",
-                f"{theme['cyan']}{control_bar(current.steering, width)}{theme['reset']}",
-                "Left (-) / Right (+)",
-                "",
-                f"Speed checked: {'yes' if speed_tested else 'move left stick forward'}",
-                f"Steering checked: {'yes' if steering_tested else 'move right stick'}",
-                "Enter: continue after checking both / Esc: cancel",
-            ]
+            speed_mark = "checked" if speed_tested else "move left stick"
+            steering_mark = "checked" if steering_tested else "move right stick"
+            status = f"Speed: {speed_mark}   Steering: {steering_mark}"
             if inactive:
-                lines += [
-                    "",
-                    "No recent control changes. If sticks do not respond,",
-                    "wake the controller and check its wireless connection.",
-                ]
-            terminal.write(
-                "\033[H"
-                + "".join("\r\033[2K" + line + "\n" for line in lines)
-                + "\033[J"
+                status += " | No changes: wake controller if unresponsive"
+            monitor.update(
+                current.speed,
+                current.steering,
+                title="Check controls",
+                status=status,
+                status_style="green" if speed_tested and steering_tested else "dim",
+                footer=("Enter Continue after checking both / Esc Cancel",),
             )
-            terminal.flush()
 
         def key(timeout):
             ready, _, _ = select.select([reader], [], [], timeout)
             return reader.read(1) if ready else None
 
-        with terminal_screen(stream=terminal):
+        with monitor:
             try:
                 tty.setcbreak(reader.fileno())
-                terminal.write("\033[?25l")
-                terminal.flush()
                 return preview_loop(
                     lambda: joystick.read(controls=controls),
                     key,
@@ -137,5 +97,3 @@ def preview_controls(joystick, controls, settings):
                 )
             finally:
                 termios.tcsetattr(reader.fileno(), termios.TCSADRAIN, saved)
-                terminal.write("\033[?25h")
-                terminal.flush()

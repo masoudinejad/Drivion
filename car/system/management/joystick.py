@@ -63,6 +63,7 @@ def joystick_menu(car_root, *, select=select_item):
     actions = (
         ("Identify and select device", select_joystick),
         ("Configure controls", configure_controls),
+        ("Check controls", check_controls),
     )
     while True:
         selected = select("Joystick", [label for label, action in actions])
@@ -71,3 +72,60 @@ def joystick_menu(car_root, *, select=select_item):
         if not 0 <= selected < len(actions):
             raise ValueError("Invalid joystick menu selection")
         actions[selected][1](car_root)
+
+
+def check_controls(car_root, *, factory=None, monitor_factory=None):
+    """Monitor saved joystick settings until Escape; never write configuration."""
+    import select
+    import termios
+    import tty
+
+    from car.src.config import load_config
+    from car.src.joystick import Joystick
+    from car.system.ui.drive_monitor import DriveMonitor
+
+    settings = load_config(Path(car_root) / "config.toml").joystick
+    factory = Joystick if factory is None else factory
+    monitor_factory = DriveMonitor if monitor_factory is None else monitor_factory
+    with (
+        factory(settings) as joystick,
+        open("/dev/tty", encoding="utf-8") as reader,
+        open("/dev/tty", "w", encoding="utf-8", buffering=1) as terminal,
+    ):
+        saved_terminal = termios.tcgetattr(reader.fileno())
+        controls = settings.controls
+        with monitor_factory(
+            allow_reverse=controls.allow_reverse,
+            speed_mode=controls.speed_mode,
+            steering_mode=controls.steering_mode,
+            stream=terminal,
+        ) as monitor:
+            try:
+                tty.setcbreak(reader.fileno())
+                while True:
+                    current = joystick.read()
+                    monitor.update(
+                        current.speed,
+                        current.steering,
+                        title="Joystick controls",
+                        status="Saved control settings / Input demands",
+                        footer=(
+                            "Move sticks to check response / Esc Back",
+                            "Wake an idle controller if sticks do not respond",
+                        ),
+                    )
+                    ready, _, _ = select.select(
+                        [reader], [], [], monitor.refresh_seconds
+                    )
+                    if ready:
+                        key = reader.read(1)
+                        if key == "\x1b":
+                            return
+                        if key == "\x03":
+                            raise KeyboardInterrupt
+                        if not key:
+                            raise RuntimeError(
+                                "Terminal input closed during joystick check"
+                            )
+            finally:
+                termios.tcsetattr(reader.fileno(), termios.TCSADRAIN, saved_terminal)

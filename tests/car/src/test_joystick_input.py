@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from car.src.config import load_config, update_config
 from car.src.configuration.schema import JoystickAxisConfig
-from car.src.joystick import Joystick
+from car.src.joystick import ControlInput, Joystick
 from car.src.joystick.discovery import Controller
 from car.src.joystick.joystick import interpret_axis
 from car.system.management.joystick_setup import calibrate_axis, configure_controls
@@ -449,3 +449,73 @@ def test_preview_uses_pending_controls_without_mutating_settings(settings, runti
         device.values[1] = 55
         assert joystick.read(controls=pending).speed == 0
         assert joystick.config == settings
+
+
+def test_check_controls_uses_saved_settings_without_modifying_config(
+    tmp_path, settings, monkeypatch
+):
+    import select
+    import termios
+    import tty
+    from contextlib import nullcontext
+
+    from car.system.management import joystick as management
+
+    path = tmp_path / "config.toml"
+    path.write_text(Path("car/config.toml").read_text())
+    update_config("joystick", settings.model_dump(exclude_none=True), path)
+    original = path.read_bytes()
+    reader = SimpleNamespace(fileno=lambda: 42, read=lambda count: "\x1b")
+    opened = []
+    shown = []
+    closed = []
+    restored = []
+    terminal = SimpleNamespace()
+    monkeypatch.setattr(
+        management,
+        "open",
+        lambda path, mode="r", **kwargs: nullcontext(
+            reader if mode == "r" else terminal
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(select, "select", lambda *args: ([reader], [], []))
+    monkeypatch.setattr(termios, "tcgetattr", lambda fd: "old-terminal")
+    monkeypatch.setattr(termios, "tcsetattr", lambda *args: restored.append(args))
+    monkeypatch.setattr(tty, "setcbreak", lambda fd: None)
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            closed.append(True)
+
+        def read(self):
+            return ControlInput(0.5, -0.5)
+
+    class Monitor:
+        refresh_seconds = 0.1
+
+        def __init__(self, **kwargs):
+            shown.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def update(self, speed, steering, **kwargs):
+            shown.append((speed, steering))
+
+    management.check_controls(
+        tmp_path,
+        factory=lambda config: opened.append(config) or Session(),
+        monitor_factory=Monitor,
+    )
+    assert opened == [settings]
+    assert shown[0]["speed_mode"] == settings.controls.speed_mode
+    assert shown[1] == (0.5, -0.5)
+    assert closed and restored == [(42, termios.TCSADRAIN, "old-terminal")]
+    assert path.read_bytes() == original

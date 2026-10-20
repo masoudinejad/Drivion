@@ -208,3 +208,46 @@ Joystick calibration uses a live preview before saving. The preview shares the
 management screen, shows signed bars from the runtime input class, and restores
 the cursor and terminal input mode on success, cancellation, or failure. Enter
 continues after both controls respond; Escape cancels the pending setup.
+
+## General drive monitor
+
+`drive_monitor.py` provides `DriveMonitor`, the shared display for normal driving
+and joystick checks. It accepts normalized speed and steering demands from any
+source; it does not depend on the joystick, calibration, Arduino, or a driving
+loop. Calibration and **Joystick → Check controls** both use this UI module.
+
+Accurate controls show compact gauges and decimal values. Reverse-enabled speed
+and steering use centred gauges; forward-only speed uses the entire gauge from
+STOP to FWD. Fixed controls show highlighted direction/state choices without a
+fractional value. Modes are independent. Unavailable values use `None` and are
+shown as unavailable rather than zero. Values are demands, not measured speed
+or steering angle.
+
+```python
+from car.system.ui.drive_monitor import DriveMonitor
+
+with DriveMonitor(
+    allow_reverse=True, speed_mode="accurate", steering_mode="accurate",
+) as monitor:
+    # Call from the application's driving loop after obtaining each demand.
+    monitor.update(0.7, -0.3, status="Manual control")
+```
+
+The application owns input polling, timing, and vehicle control. The monitor
+never reads input, sleeps, or starts a worker. `update` limits terminal redraws
+to the UI refresh interval; it returns whether a frame was drawn. Use
+`render(speed, steering, columns=80)` to embed a frame in another terminal view.
+Optional status text and footer lines let callers present source-specific
+information; calibration's validation and keyboard handling stay with its
+caller. Unknown, stale, or disconnected input should be reported by the source,
+not inferred from an unchanged driving demand.
+
+The monitor uses the existing cyan/gray palette, green completion statuses, and
+alternate-screen ownership. It adapts to narrow terminals, supports `NO_COLOR`,
+uses ASCII gauges for incompatible stream encodings, and produces plain frames
+for redirected output. Dimensions and redraw timing live in `[drive_monitor]`
+in `theme.toml`. Use a context manager to restore the cursor and screen on exit.
+
+The compact gauges and separate status row take layout inspiration from the
+[CarStream CLI dashboard](https://pypi.org/project/carstream-cli/). This display
+uses the project's existing UI code and requires no extra dependency.

@@ -40,3 +40,9 @@ Joystick = "Identify a controller and configure controls"
 [menus.Joystick]
 "Identify and select device" = "Find and save a connected controller"
 "Configure controls" = "Calibrate sticks, modes, and reverse driving"
+"Check controls" = "Monitor saved joystick settings"
+
+# Display settings only; driving and input polling keep their own cadence.
+[drive_monitor]
+gauge_cells_per_side = 10
+refresh_seconds = 0.1

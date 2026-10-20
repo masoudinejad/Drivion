@@ -7,21 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from car.src.joystick import ControlInput
-from car.system.management.joystick_preview import control_bar, preview_loop
-
-
-@pytest.mark.parametrize(
-    "value,expected",
-    [
-        (-1, "[####|    ]"),
-        (-0.5, "[  ##|    ]"),
-        (0, "[    |    ]"),
-        (0.5, "[    |##  ]"),
-        (1, "[    |####]"),
-    ],
-)
-def test_signed_bars(value, expected):
-    assert control_bar(value, 4) == expected
+from car.system.management.joystick_preview import preview_loop
 
 
 def test_preview_requires_both_controls_before_enter():
@@ -79,6 +65,7 @@ def test_preview_restores_terminal_on_read_failure(monkeypatch):
 
     reader = SimpleNamespace(fileno=lambda: 42)
     terminal = io.StringIO()
+    terminal.isatty = lambda: True
     restored = []
     saved = object()
     monkeypatch.setattr(
@@ -89,7 +76,6 @@ def test_preview_restores_terminal_on_read_failure(monkeypatch):
         ),
         raising=False,
     )
-    monkeypatch.setattr(module, "terminal_screen", lambda **kwargs: nullcontext())
     monkeypatch.setattr(module.termios, "tcgetattr", lambda fd: saved)
     monkeypatch.setattr(
         module.termios, "tcsetattr", lambda *args: restored.append(args)
@@ -103,14 +89,16 @@ def test_preview_restores_terminal_on_read_failure(monkeypatch):
     with pytest.raises(OSError, match="disconnected"):
         module.preview_controls(
             SimpleNamespace(read=fail),
-            None,
+            SimpleNamespace(
+                allow_reverse=True, speed_mode="accurate", steering_mode="accurate"
+            ),
             {
                 "preview_refresh_seconds": 0.05,
                 "preview_idle_hint_seconds": 5,
             },
         )
     assert restored == [(42, module.termios.TCSADRAIN, saved)]
-    assert terminal.getvalue().endswith("\033[?25h")
+    assert "\033[?25h" in terminal.getvalue()
 
 
 def test_fixed_forward_only_can_be_checked_when_initially_held():

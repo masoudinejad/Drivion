@@ -76,6 +76,14 @@ is `1.5`: at the first endpoint, the intended axis must move at least 1.5 times
 as far as other eligible axes after normalizing their driver ranges. Only the selected
 axis contributes to the resulting control signal.
 
+## Check saved controls
+
+Choose **Joystick → Check controls** to initialize the selected controller and
+monitor its saved settings without recalibrating or changing configuration.
+Move either stick and press Escape to return. Both this check and the pre-save
+calibration check use the general `DriveMonitor` in `system/ui/drive_monitor.py`.
+It adapts automatically to reverse driving and each control's response mode.
+
 ## Runtime class
 
 ```python
