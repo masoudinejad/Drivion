@@ -27,6 +27,7 @@ def update_config(
 
     For example, ``update_config("camera.frame_rate", 30.0)`` updates the
     central car/config.toml. Comments and unrelated settings are preserved.
+    Existing sections can also be replaced atomically with a complete dictionary.
     Unknown settings raise KeyError; invalid values raise ValidationError.
     Existing in-memory configurations must be reloaded by their callers.
     Callers must serialize concurrent updates to avoid losing changes.
@@ -42,7 +43,7 @@ def update_config(
             raise KeyError(parameter)
         table = table[part]
     key = parts[-1]
-    if not key or key not in table or isinstance(table[key], dict):
+    if not key or key not in table:
         raise KeyError(parameter)
     # Validate the Python value before serialization, so TOML cannot coerce it.
     values = document.unwrap()

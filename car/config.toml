@@ -64,3 +64,10 @@ STATUS_INTERVAL_MS = 100
 MAX_TELEMETRY_INTERVAL_MS = 60000
 RX_BUDGET_BYTES = 32
 TX_BUDGET_BYTES = 32
+
+[joystick]
+# Empty name means unselected. System management saves the hardware identity.
+name = ""
+vendor = 0
+product = 0
+unique_id = ""

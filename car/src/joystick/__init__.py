@@ -1,1 +1,1 @@
-"""Joystick module; implementation to follow."""
+"""Linux joystick discovery and hardware identity matching."""

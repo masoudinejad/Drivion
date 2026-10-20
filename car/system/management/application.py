@@ -7,6 +7,7 @@ from pathlib import Path
 from ..arduino.management.menu import arduino_menu
 from ..information.view import system_info_page
 from ..ui.navigation import select_item, show_page
+from .joystick import joystick_menu
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ def default_items():
     return (
         MenuItem("System Info", system_info_page),
         MenuItem("Arduino", arduino_menu),
+        MenuItem("Joystick", joystick_menu),
     )
 
 

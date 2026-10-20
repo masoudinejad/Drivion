@@ -48,7 +48,7 @@ def test_update_config_preserves_comments_and_permissions(tmp_path):
         ("camera.frame_rate", -1.0, ValidationError),
         ("camera.frame_rate", "30", ValidationError),
         ("camera.framerate", 30.0, KeyError),
-        ("camera", {}, KeyError),
+        ("camera", {}, ValidationError),
         ("camera.frame_rate.value", 30.0, KeyError),
         ("", 30.0, KeyError),
     ],

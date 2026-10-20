@@ -15,6 +15,15 @@ class EmptyConfig(ConfigModel):
     """Reject settings in sections whose schema has not been defined yet."""
 
 
+class JoystickConfig(ConfigModel):
+    """Saved hardware identity; empty until a controller has been selected."""
+
+    name: str
+    vendor: int = Field(ge=0, le=65535)
+    product: int = Field(ge=0, le=65535)
+    unique_id: str
+
+
 class CameraConfig(ConfigModel):
     """Requested camera capture and persistence settings."""
 
@@ -181,7 +190,7 @@ class AppConfig(ConfigModel):
     firmware: dict[str, dict[str, object]]
     camera: CameraConfig
     communication: CommunicationConfig
-    joystick: EmptyConfig = Field(default_factory=EmptyConfig)
+    joystick: JoystickConfig
     drive: EmptyConfig = Field(default_factory=EmptyConfig)
     inference: EmptyConfig = Field(default_factory=EmptyConfig)
     recording: EmptyConfig = Field(default_factory=EmptyConfig)

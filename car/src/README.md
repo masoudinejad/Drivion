@@ -8,9 +8,9 @@ environment managed in `../system/`.
 
 `config.py` loads the central `car/config.toml` into the single Pydantic schema
 defined in `configuration/schema.py`. Models reject unknown keys, invalid types,
-and invalid values. Camera, Arduino, and communication settings are required so
-configurable
-values never fall back to copies embedded in Python. Empty future sections use
+and invalid values. Camera, Arduino, joystick, and communication settings are
+required so configurable values never fall back to copies embedded in Python.
+Empty future sections use
 empty models and reject settings until their schemas are defined. Bootstrap and
 boot tools use narrow standard-library readers because they must run before the
 application dependencies are installed.
@@ -49,8 +49,10 @@ config = update_config("camera.frame_rate", 30.0)
 ```
 
 Use the complete dotted parameter name and a typed Python value. An optional
-`path` selects another TOML file. The setting must already exist in that file;
-unknown names raise `KeyError`, and invalid values raise Pydantic
+`path` selects another TOML file. The setting or section must already exist
+in that file;
+complete section dictionaries are saved atomically. Unknown names raise
+`KeyError`, and invalid values raise Pydantic
 `ValidationError` before writing. The entire configuration is validated,
 including
 relationships between settings. Updates preserve comments, unrelated settings,
@@ -136,3 +138,9 @@ manual](https://datasheets.raspberrypi.com/camera/picamera2-manual.pdf).
 
 See [communication/README.md](communication/README.md) for the reusable Python
 module, Arduino library, central configuration, and versioned wire protocol.
+
+## Joystick selection
+
+Choose **Joystick** in system management to inspect connected controllers and
+save a hardware identity for later input handling. See
+[joystick/README.md](joystick/README.md) for matching rules and permissions.
