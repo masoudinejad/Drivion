@@ -30,7 +30,7 @@ N = ["█▄ █", "█ ▀█", "▀  ▀"]
 [menus."Drivion system management"]
 "System Info" = "View hardware and deployment details"
 Arduino = "Identify devices and manage firmware"
-Joystick = "Identify and select a controller"
+Joystick = "Identify a controller and configure controls"
 
 [menus.Arduino]
 "Identify and select device" = "Find a connected board"
@@ -39,3 +39,4 @@ Joystick = "Identify and select a controller"
 
 [menus.Joystick]
 "Identify and select device" = "Find and save a connected controller"
+"Configure controls" = "Calibrate sticks, modes, and reverse driving"

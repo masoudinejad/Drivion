@@ -71,3 +71,27 @@ def show_page(title, content):
         terminal.flush()
         if not reader.readline():
             raise RuntimeError("Terminal input closed")
+
+
+def prompt_number(question):
+    """Ask for a numeric setting; return None for Ignore and propagate cancellation."""
+    result = subprocess.run(
+        [
+            "bash",
+            str(Path(__file__).with_name("prompt.sh")),
+            "--question",
+            question,
+            "--type",
+            "number",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 130:
+        raise KeyboardInterrupt
+    if result.returncode == 3:
+        return None
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or "Unable to ask for a number")
+    return float(result.stdout.strip())

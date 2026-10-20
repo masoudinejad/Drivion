@@ -129,3 +129,12 @@ packages = [
     "openssh-server",
 ]
 system_imports = ["picamera2", "libcamera"]
+
+[tool.drivion.joystick_setup]
+# Minimum excursion on each side, as a fraction of the driver's full axis range.
+minimum_axis_excursion = 0.25
+# First-endpoint movement must exceed other eligible axes by this factor.
+axis_dominance_ratio = 1.5
+# Live pre-save control check; idle hints do not assert a radio sleep state.
+preview_refresh_seconds = 0.05
+preview_idle_hint_seconds = 5.0

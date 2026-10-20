@@ -1,1 +1,5 @@
-"""Linux joystick discovery and hardware identity matching."""
+"""Linux controller discovery, calibration and normalized input."""
+
+from .joystick import ControlInput, Joystick
+
+__all__ = ["ControlInput", "Joystick"]

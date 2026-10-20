@@ -195,3 +195,16 @@ bash ./system/ui/menu.sh --title "Actions" \
     --description "Inspect current status" --description "Apply changes" \
     -- "Inspect" "Update"
 ```
+
+## Completion and numeric settings
+
+Python callers use `show_success` from `progress.py` for a brief completion
+status without an acknowledgement page. `prompt_number` from `navigation.py`
+wraps the shared numeric prompt, returns `None` for Ignore, and propagates
+cancellation. Callers validate the numeric value against their configuration
+schema before saving.
+
+Joystick calibration uses a live preview before saving. The preview shares the
+management screen, shows signed bars from the runtime input class, and restores
+the cursor and terminal input mode on success, cancellation, or failure. Enter
+continues after both controls respond; Escape cancels the pending setup.

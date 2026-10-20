@@ -3,14 +3,14 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from car.src.configuration.schema import JoystickConfig
+from car.src.configuration.schema import JoystickIdentity
 
 
 @dataclass(frozen=True)
 class Controller:
     """An observed controller; the event path is only valid for this scan."""
 
-    identity: JoystickConfig
+    identity: JoystickIdentity
     path: str
     specifications: str
 
@@ -48,7 +48,7 @@ def discover(*, backend=None, input_directory=Path("/dev/input")):
             ):
                 continue
             info = device.info
-            identity = JoystickConfig(
+            identity = JoystickIdentity(
                 name=device.name,
                 vendor=info.vendor,
                 product=info.product,

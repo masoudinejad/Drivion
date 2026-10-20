@@ -15,13 +15,52 @@ class EmptyConfig(ConfigModel):
     """Reject settings in sections whose schema has not been defined yet."""
 
 
-class JoystickConfig(ConfigModel):
-    """Saved hardware identity; empty until a controller has been selected."""
+class JoystickIdentity(ConfigModel):
+    """Readable controller identity, independent of event and physical paths."""
 
     name: str
     vendor: int = Field(ge=0, le=65535)
     product: int = Field(ge=0, le=65535)
     unique_id: str
+
+
+class JoystickAxisConfig(ConfigModel):
+    """Calibrated raw axis bounds and orientation."""
+
+    axis: str = Field(pattern=r"^ABS_[A-Z0-9_]+$")
+    minimum: int
+    centre: int
+    maximum: int
+    inverted: bool
+
+    @model_validator(mode="after")
+    def ordered_bounds(self):
+        if not self.minimum < self.centre < self.maximum:
+            raise ValueError("axis bounds must satisfy minimum < centre < maximum")
+        return self
+
+
+class JoystickControlsConfig(ConfigModel):
+    """Independent interpretation modes and optional calibrated stick mappings."""
+
+    allow_reverse: bool
+    speed_mode: Literal["fixed", "accurate"]
+    steering_mode: Literal["fixed", "accurate"]
+    dead_zone: float = Field(ge=0, lt=1, allow_inf_nan=False)
+    speed: JoystickAxisConfig | None = None
+    steering: JoystickAxisConfig | None = None
+
+    @model_validator(mode="after")
+    def different_axes(self):
+        if self.speed and self.steering and self.speed.axis == self.steering.axis:
+            raise ValueError("speed and steering must use different axes")
+        return self
+
+
+class JoystickConfig(JoystickIdentity):
+    """Selected controller and its control interpretation settings."""
+
+    controls: JoystickControlsConfig
 
 
 class CameraConfig(ConfigModel):

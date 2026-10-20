@@ -70,6 +70,15 @@ def run_background(message, operation, *args, stream=None, **kwargs):
         return executor.submit(operation, *args, **kwargs).result()
 
 
+def show_success(message, *, stream=None):
+    """Print a brief completion status without requiring acknowledgement."""
+    if not message or any(ord(char) < 32 or ord(char) == 127 for char in message):
+        raise ValueError("Success messages must be non-empty and single-line")
+    stream = sys.stderr if stream is None else stream
+    theme = load_theme(stream.isatty() and "NO_COLOR" not in os.environ)
+    print(f"  {theme['green']}✓{theme['reset']} {message}", file=stream, flush=True)
+
+
 def main():
     """Run a command with progress feedback, preserving its output and status."""
     import argparse

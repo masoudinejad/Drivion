@@ -71,3 +71,10 @@ name = ""
 vendor = 0
 product = 0
 unique_id = ""
+
+[joystick.controls]
+allow_reverse = true
+speed_mode = "accurate" # "accurate" or "fixed"
+steering_mode = "accurate" # "accurate" or "fixed"
+dead_zone = 0.05 # Fraction of each side's travel treated as neutral.
+# Axis calibration tables are saved by Joystick -> Configure controls.

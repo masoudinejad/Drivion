@@ -14,7 +14,11 @@ def _printable(value):
 def select_joystick(car_root, *, select=select_item, display=show_page, scan=None):
     """Select directly from discovered controllers; save without a detail page."""
     from car.src.config import load_config, update_config
-    from car.src.joystick.discovery import discover, resolve_controller
+    from car.src.joystick.discovery import (
+        discover,
+        matches_identity,
+        resolve_controller,
+    )
 
     scan = discover if scan is None else scan
     controllers, errors = scan()
@@ -44,14 +48,22 @@ def select_joystick(car_root, *, select=select_item, display=show_page, scan=Non
     device = controllers[selected]
     current, errors = scan()
     resolve_controller(current, device.identity)
-    update_config(
-        "joystick", device.identity.model_dump(), Path(car_root) / "config.toml"
-    )
+    controls = saved.controls
+    if not matches_identity(device.identity, saved):
+        controls = controls.with_overrides(speed=None, steering=None)
+    settings = device.identity.model_dump()
+    settings["controls"] = controls.model_dump(exclude_none=True)
+    update_config("joystick", settings, Path(car_root) / "config.toml")
 
 
 def joystick_menu(car_root, *, select=select_item):
     """Host joystick operations and return to management on Back."""
-    actions = (("Identify and select device", select_joystick),)
+    from .joystick_setup import configure_controls
+
+    actions = (
+        ("Identify and select device", select_joystick),
+        ("Configure controls", configure_controls),
+    )
     while True:
         selected = select("Joystick", [label for label, action in actions])
         if selected is None:

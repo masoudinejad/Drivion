@@ -141,6 +141,7 @@ module, Arduino library, central configuration, and versioned wire protocol.
 
 ## Joystick selection
 
-Choose **Joystick** in system management to inspect connected controllers and
-save a hardware identity for later input handling. See
-[joystick/README.md](joystick/README.md) for matching rules and permissions.
+Choose **Joystick** in system management to identify a controller and configure
+its sticks, response modes, dead zone, and reverse driving.
+`Joystick(config.joystick)` returns normalized speed and steering via `read()`.
+See [joystick/README.md](joystick/README.md) for calibration and runtime usage.

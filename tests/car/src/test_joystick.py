@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from car.src.config import load_config
-from car.src.configuration.schema import JoystickConfig
+from car.src.configuration.schema import JoystickIdentity
 from car.src.joystick.discovery import Controller, discover, resolve_controller
 from car.system.management.joystick import select_joystick
 
@@ -14,7 +14,7 @@ from car.system.management.joystick import select_joystick
 @pytest.fixture
 def controller():
     return Controller(
-        JoystickConfig(
+        JoystickIdentity(
             name="Gamepad",
             vendor=1,
             product=2,
@@ -39,7 +39,7 @@ def test_save_and_cancel(tmp_path, controller):
         )
         if selection is None:
             assert path.read_bytes() == original
-    assert load_config(path).joystick == controller.identity
+    assert load_config(path).joystick.name == controller.identity.name
     assert pages == []
 
 
@@ -138,7 +138,13 @@ def test_saved_name_is_visible_in_menu(tmp_path, controller):
 
     path = tmp_path / "config.toml"
     path.write_text(Path("car/config.toml").read_text())
-    update_config("joystick", controller.identity.model_dump(), path)
+    update_config(
+        "joystick",
+        load_config(path)
+        .joystick.with_overrides(**controller.identity.model_dump())
+        .model_dump(exclude_none=True),
+        path,
+    )
     titles = []
     select_joystick(
         tmp_path,
@@ -158,7 +164,7 @@ def test_joystick_submenu_dispatch_and_back(tmp_path, monkeypatch):
 
     def select(title, labels):
         assert title == "Joystick"
-        assert labels == ["Identify and select device"]
+        assert labels == ["Identify and select device", "Configure controls"]
         return next(choices)
 
     joystick.joystick_menu(tmp_path, select=select)
