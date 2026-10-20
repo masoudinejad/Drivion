@@ -5,20 +5,21 @@ Reusable Bash UI helpers for car system operations.
 ## Drive startup
 
 `startup.py` provides the Python startup display used by `car/drive.py`. It shows
-a bold cyan Drivion banner using the `art` package's `small` font after the
+a custom uppercase Unicode block banner after the
 configured Python environment has been entered, followed by configuration and
 environment status. Driving remains a
 placeholder, so it does not report camera or model readiness.
 
 The display clears the visible interactive terminal before showing the banner,
-and matches the menu's cyan, bold, and dim styling without additional
-dependencies beyond the existing `art` package or an artificial startup delay.
+and uses muted DRI and bright VION lettering with shaded interiors, inspired by
+OpenCode's terminal logo. Glyphs, the color split, and RGB colors live in the
+`[banner]` section of `theme.toml`. No additional dependency or artificial startup
+delay is needed. Colors assume a dark terminal background.
 Redirected output and `TERM=dumb` use plain text without ANSI escape sequences.
 `NO_COLOR` disables color and
 styling while keeping the interactive screen clear.
 Narrow terminals and redirected output use a single-line DRIVION title.
-Gray horizontal lines frame the banner and its subtitle. The ASCII letters use
-two extra spaces between characters.
+The banner has one space between letters and no horizontal frame.
 
 ## Interactive menu
 

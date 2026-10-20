@@ -4,10 +4,26 @@ cyan = 36 # Selection, title, and progress
 amber = 33 # Ignore
 red = 31 # Validation errors
 green = 32 # Success
-gray = 90 # Banner borders
+gray = 90 # Muted UI details
 bold = 1
 dim = 2
 reset = 0
+
+[banner]
+muted_letters = 3
+muted_rgb = [150, 147, 142]
+bright_rgb = [229, 229, 229]
+muted_shadow_rgb = [55, 54, 53]
+bright_shadow_rgb = [75, 75, 75]
+
+# Equal-width rows; _ is a shaded space and ^ a shaded upper half block.
+[banner.glyphs]
+D = ["█▀▀▄", "█__█", "▀▀▀ "]
+R = ["█▀▀▄", "█^^▄", "▀  ▀"]
+I = ["▀█▀", " █ ", "▀▀▀"]
+V = ["█  █", "█__█", " ▀▀ "]
+O = ["█▀▀█", "█__█", "▀▀▀▀"]
+N = ["█▄ █", "█ ▀█", "▀  ▀"]
 
 
 # Optional muted descriptions, keyed by menu title and option label.

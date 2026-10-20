@@ -3,18 +3,39 @@
 import os
 import shutil
 import sys
+from pathlib import Path
+
+import tomllib
 
 from .progress import run_background
 from .theme import load_theme
 
 
-def _prepare_banner():
-    """Render the title after entering the car environment, fitting its width."""
-    from art import text2art
-
-    banner = text2art("DRIVION", font="small", space=2).rstrip().splitlines()
-    if max(map(len, banner)) + 2 <= shutil.get_terminal_size().columns:
-        return banner
+def _prepare_banner(styled=True):
+    """Render configured block glyphs, measuring width before adding ANSI styles."""
+    with Path(__file__).with_name("theme.toml").open("rb") as source:
+        config = tomllib.load(source)["banner"]
+    glyphs = [config["glyphs"][letter] for letter in "DRIVION"]
+    width = sum(len(glyph[0]) for glyph in glyphs) + len(glyphs) - 1
+    if width + 2 <= shutil.get_terminal_size().columns:
+        lines = []
+        for row in range(len(glyphs[0])):
+            parts = []
+            for index, glyph in enumerate(glyphs):
+                prefix = "muted" if index < config["muted_letters"] else "bright"
+                foreground = ";".join(map(str, config[f"{prefix}_rgb"]))
+                shadow = ";".join(map(str, config[f"{prefix}_shadow_rgb"]))
+                text = ""
+                for char in glyph[row]:
+                    if styled:
+                        background = f"\033[48;2;{shadow}m" if char in "_^" else ""
+                        text += f"\033[38;2;{foreground}m{background}"
+                    text += {"_": " ", "^": "▀"}.get(char, char)
+                    if styled:
+                        text += "\033[0m"
+                parts.append(text)
+            lines.append(" ".join(parts))
+        return lines
     return ["DRIVION"]
 
 
@@ -25,23 +46,20 @@ def show_startup():
         print("\033[2J\033[H", end="", flush=True)
     styled = interactive and "NO_COLOR" not in os.environ
     theme = load_theme(styled)
-    bold, dim, cyan, green, gray, reset = (
-        theme[name] for name in ("bold", "dim", "cyan", "green", "gray", "reset")
-    )
+    dim, green, reset = (theme[name] for name in ("dim", "green", "reset"))
     mark = "✓" if styled else "[ok]"
     lines = ["DRIVION"]
     if interactive:
-        lines = run_background("Preparing Drivion", _prepare_banner, stream=sys.stdout)
+        lines = run_background(
+            "Preparing Drivion", _prepare_banner, styled, stream=sys.stdout
+        )
     print()
-    rule = "─" if interactive else "-"
     subtitle = "Autonomous driving system"
-    border = rule * max(len(subtitle), *(len(line.rstrip()) for line in lines))
-    print(f"  {gray}{border}{reset}")
     for line in lines:
-        print(f"  {cyan}{bold}{line.rstrip()}{reset}")
+        print(f"  {line.rstrip()}")
     print()
     print(f"  {dim}{subtitle}{reset}")
-    print(f"  {gray}{border}{reset}\n")
+    print()
     print(f"  {green}{mark}{reset} Configuration loaded")
     print(f"  {green}{mark}{reset} Python environment ready")
     print(f"\n  {dim}Driving functionality is not implemented yet.{reset}\n")
