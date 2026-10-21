@@ -110,3 +110,31 @@ The result page shows the reported identity or query error and observation time;
 Enter returns to the Arduino submenu. Declining confirmation returns directly.
 This updates system information using the check procedure; it does not compile
 or upload. A reported identity is not verification against a compiled build.
+
+## Hardware tests
+
+Open `manage.py` and select **Hardware tests**. The camera check captures the
+configured number of frames, validates their shape/type, and reports capture
+latencies and observed throughput. The Arduino communication check negotiates
+with compatible running communication firmware, repeats clock synchronization
+and correlated telemetry requests, and requires fresh status. Stop driving and
+close other serial users first: opening the port may reset the board. The check
+sends no movement targets and does not flash firmware.
+
+Each run prints progress and results to the terminal and writes a separate
+UTC-timestamped `.log` file under the `[hardware_tests].log_directory` path,
+relative to the car root. Failures include tracebacks; cancellation records an
+interrupted result. The result page includes the log path. Configure frame count,
+Arduino sample count, and response timeout in `[hardware_tests]` in
+`car/config.toml`; camera and serial settings come from their existing sections.
+
+Latencies are host monotonic-clock measurements in milliseconds. Every sample
+and its minimum, mean, median, and maximum are logged. Camera capture latency
+measures the blocking capture call, including frame delivery and array handling;
+it does not measure exposure-to-display latency. Initialization and configured
+warmup are excluded from capture throughput. Arduino handshake and telemetry
+latencies measure host request/response round trips, including serial I/O and
+polling; they are not one-way delays. Initial connection time includes the board
+boot wait and is reported separately. Missing replies fail after the configured
+response timeout (subject to an in-progress serial read). Camera capture uses the
+camera driver's blocking call; an unresponsive driver may require interruption.

@@ -7,6 +7,7 @@ from pathlib import Path
 from ..arduino.management.menu import arduino_menu
 from ..information.view import system_info_page
 from ..ui.navigation import select_item, show_page
+from .hardware_tests import hardware_tests_menu
 from .joystick import joystick_menu
 
 
@@ -24,6 +25,7 @@ def default_items():
         MenuItem("System Info", system_info_page),
         MenuItem("Arduino", arduino_menu),
         MenuItem("Joystick", joystick_menu),
+        MenuItem("Hardware tests", hardware_tests_menu),
     )
 
 

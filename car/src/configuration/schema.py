@@ -231,9 +231,33 @@ class CommunicationConfig(ConfigModel):
         return self
 
 
+class HardwareTestsConfig(ConfigModel):
+    """Sample counts, response budget and output location for manual diagnostics."""
+
+    log_directory: str
+    camera_frames: int = Field(ge=1, le=10000)
+    arduino_samples: int = Field(ge=1, le=10000)
+    response_timeout_seconds: float = Field(gt=0, le=60, allow_inf_nan=False)
+
+    @field_validator("log_directory")
+    @classmethod
+    def safe_log_directory(cls, value):
+        path = PurePosixPath(value)
+        if (
+            not value
+            or value == "."
+            or "\\" in value
+            or path.is_absolute()
+            or ".." in path.parts
+        ):
+            raise ValueError("must be a safe relative log directory")
+        return value
+
+
 class AppConfig(ConfigModel):
     """All supported sections in car/config.toml."""
 
+    hardware_tests: HardwareTestsConfig | None = None
     system: SystemConfig
     arduino: ArduinoConfig
     firmware: dict[str, dict[str, object]]

@@ -80,3 +80,9 @@ speed_mode = "accurate" # "accurate" or "fixed"
 steering_mode = "accurate" # "accurate" or "fixed"
 dead_zone = 0.05 # Fraction of each side's travel treated as neutral.
 # Axis calibration tables are saved by Joystick -> Configure controls.
+
+[hardware_tests]
+log_directory = "system/hardware_tests/logs"
+camera_frames = 30
+arduino_samples = 10
+response_timeout_seconds = 2.0
