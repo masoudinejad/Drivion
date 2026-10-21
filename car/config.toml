@@ -56,6 +56,8 @@ command_validity_ms = 150
 clock_drift_ppm = 10000
 max_session_age_seconds = 10.0
 read_budget_bytes = 256
+# Bound responses retained during synchronization until the next poll.
+pending_event_limit = 256
 
 [firmware.communication_demo]
 COMMAND_TIMEOUT_MS = 200

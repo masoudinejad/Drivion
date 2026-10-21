@@ -76,6 +76,7 @@ class Communication:
         self._rtt = 0.0
         self._last_board_sequence: int | None = None
         self._last_telemetry_sequence: int | None = None
+        self._pending_events: list[ReportedValues | Status | Acknowledgement] = []
         self.closed = False
 
     @classmethod
@@ -106,19 +107,26 @@ class Communication:
     def _handshake(self, *, new_session):
         if self.closed:
             raise RuntimeError("communication is closed")
-        self.capabilities = None
+        try:
+            return self._negotiate(new_session=new_session)
+        except BaseException:
+            self.capabilities = None
+            raise
+
+    def _negotiate(self, *, new_session):
         if new_session:
+            self.capabilities = None
+            self._pending_events.clear()
             self.latest_values = self.latest_status = None
             self._last_board_sequence = self._last_telemetry_sequence = None
             self.session = secrets.randbelow(0xFFFFFFFF) + 1
             self.sequence = 0
-        self.decoder = wire.Decoder(self.config.frame_timeout_seconds)
+            self.decoder = wire.Decoder(self.config.frame_timeout_seconds)
         started = self.clock()
         request = self._send(wire.MessageType.HELLO)
         while self.clock() - started < self.config.handshake_timeout_seconds:
-            frames = self.decoder.feed(
-                self.transport.read(self.config.read_budget_bytes), self.clock()
-            )
+            frames, received = self._read_frames()
+            negotiated = False
             for frame in frames:
                 if (
                     frame.session != self.session
@@ -126,11 +134,21 @@ class Communication:
                     or frame.sequence != request
                     or len(frame.payload) != wire.WELCOME.size
                 ):
+                    if self.capabilities is not None:
+                        for event in self._dispatch([frame], received):
+                            if (
+                                len(self._pending_events)
+                                >= self.config.pending_event_limit
+                            ):
+                                raise RuntimeError(
+                                    "pending event limit exceeded during negotiation; "
+                                    "poll before synchronizing again or reconnect"
+                                )
+                            self._pending_events.append(event)
                     continue
                 board_time, watchdog, max_interval, fields = wire.WELCOME.unpack(
                     frame.payload
                 )
-                received = self.clock()
                 rtt = received - started
                 if rtt > self.config.max_handshake_rtt_seconds:
                     raise TimeoutError(
@@ -152,6 +170,8 @@ class Communication:
                 self.capabilities = Capabilities(
                     watchdog, max_interval, wire.Fields(fields)
                 )
+                negotiated = True
+            if negotiated:
                 return self.capabilities
         raise TimeoutError("Arduino did not negotiate communication before deadline")
 
@@ -231,13 +251,23 @@ class Communication:
         Keep polling even with reporting disabled to receive essential status.
         """
         self._require_session()
+        frames, now = self._read_frames()
+        events = self._dispatch(frames, now)
+        pending, self._pending_events = self._pending_events, []
+        return pending + events
+
+    def _read_frames(self):
+        """Keep transport failure handling identical during polling and negotiation."""
         try:
             data = self.transport.read(self.config.read_budget_bytes)
         except BaseException:
             self.capabilities = None
             raise
         now = self.clock()
-        frames = self.decoder.feed(data, now)
+        return self.decoder.feed(data, now), now
+
+    def _dispatch(self, frames, now):
+        """Validate incoming messages and update monitoring state in wire order."""
         events = []
         for frame in frames:
             if frame.session != self.session:

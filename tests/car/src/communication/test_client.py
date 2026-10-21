@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import pytest
 from pydantic import ValidationError
 
-from car.src.communication import Communication, Fields
+from car.src.communication import Acknowledgement, Communication, Fields, Status
 from car.src.communication import protocol as wire
 from car.src.config import load_config
 from car.system.arduino.settings import load_context
@@ -194,6 +194,7 @@ def test_invalid_targets(client, speed, angle):
     "changes",
     [
         {"read_budget_bytes": 0},
+        {"pending_event_limit": 0},
         {"command_validity_ms": 50},
         {"frame_timeout_seconds": 0.001},
         {"baud_rate": True},
@@ -240,3 +241,108 @@ def test_read_failure_invalidates_session(client):
     with pytest.raises(OSError, match="disconnected"):
         comm.poll()
     assert comm.capabilities is None
+
+
+@pytest.mark.parametrize("read_budget", [24, 256])
+def test_synchronize_preserves_pending_events_and_trailing_frames(client, read_budget):
+    comm, peer, _ = client
+    comm.config = comm.config.with_overrides(read_budget_bytes=read_budget)
+    snapshot_request = comm.request_values()
+    stop_request = comm.stop()
+    peer.reply(
+        wire.Frame(
+            wire.MessageType.SNAPSHOT,
+            comm.session,
+            snapshot_request,
+            wire.TELEMETRY.pack(1000, 100, -1000, 3),
+        )
+    )
+    peer.reply(
+        wire.Frame(
+            wire.MessageType.ACK,
+            comm.session,
+            stop_request,
+            wire.ACK.pack(wire.MessageType.STOP, wire.ErrorCode.OK),
+        )
+    )
+    original_write = peer.write
+
+    def write(data):
+        result = original_write(data)
+        peer.reply(
+            wire.Frame(
+                wire.MessageType.STATUS,
+                comm.session,
+                10,
+                wire.STATUS.pack(1001, 0, 1, 1),
+            )
+        )
+        return result
+
+    peer.write = write
+    comm.synchronize()
+    events = comm.poll()
+    while peer.input:
+        events += comm.poll()
+    assert len(events) == 3
+    assert events[0].request_sequence == snapshot_request
+    assert events[1] == Acknowledgement(
+        stop_request, wire.MessageType.STOP, wire.ErrorCode.OK
+    )
+    assert isinstance(events[2], Status)
+    assert comm.latest_values is events[0]
+    assert comm.latest_status is events[2]
+    assert comm.poll() == []
+
+
+def test_synchronize_preserves_partial_frame(client):
+    comm, peer, _ = client
+    request = comm.request_values()
+    packet = wire.encode(
+        wire.Frame(
+            wire.MessageType.SNAPSHOT,
+            comm.session,
+            request,
+            wire.TELEMETRY.pack(1000, 100, 0, 3),
+        )
+    )
+    peer.input += packet[:8]
+    assert comm.poll() == []
+    peer.input += packet[8:]
+    comm.synchronize()
+    assert comm.poll()[0].request_sequence == request
+
+
+def test_synchronize_event_overflow_is_explicit_and_bounded(client):
+    comm, peer, _ = client
+    comm.config = comm.config.with_overrides(pending_event_limit=2)
+    for sequence in range(3):
+        peer.reply(
+            wire.Frame(
+                wire.MessageType.ACK,
+                comm.session,
+                sequence,
+                wire.ACK.pack(wire.MessageType.STOP, wire.ErrorCode.OK),
+            )
+        )
+    with pytest.raises(RuntimeError, match="pending event limit"):
+        comm.synchronize()
+    assert comm.capabilities is None
+    assert len(comm._pending_events) <= 2
+    comm.connect()
+    assert comm.poll() == []
+
+
+def test_repeated_synchronization_preserves_events_until_poll(client):
+    comm, peer, _ = client
+    for sequence in range(2):
+        peer.reply(
+            wire.Frame(
+                wire.MessageType.ACK,
+                comm.session,
+                sequence,
+                wire.ACK.pack(wire.MessageType.STOP, wire.ErrorCode.OK),
+            )
+        )
+        comm.synchronize()
+    assert [event.request_sequence for event in comm.poll()] == [0, 1]

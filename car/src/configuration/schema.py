@@ -216,6 +216,7 @@ class CommunicationConfig(ConfigModel):
     clock_drift_ppm: int = Field(ge=0, le=100000)
     max_session_age_seconds: float = Field(gt=0, allow_inf_nan=False)
     read_budget_bytes: int = Field(ge=1, le=65536)
+    pending_event_limit: int = Field(ge=1, le=65536)
 
     @model_validator(mode="after")
     def consistent_timing(self):

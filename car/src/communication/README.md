@@ -77,8 +77,14 @@ replayed, wrong-session, and unrelated messages never refresh its lease.
 
 Call `synchronize()` before `max_session_age_seconds` or the clock uncertainty
 budget expires. It refreshes the estimate within the same session, preserving
-reports and targets. Its exchange pauses target transmission, so schedule it
-with adequate lease margin. An excessive RTT fails negotiation; a silent peer
+reports and targets. Pending acknowledgements, snapshots, and streaming events
+are dispatched in wire order and returned by the next `poll()`, including frames
+received alongside WELCOME. Partial frames survive synchronization. The bounded
+`communication.pending_event_limit` limits retained events across exchanges;
+poll between exchanges to drain them. Exceeding the limit raises an explicit
+error and invalidates the session; reconnect to recover.
+The exchange pauses target transmission, so schedule it with adequate lease
+margin. An excessive RTT fails negotiation; a silent peer
 can wait until `handshake_timeout_seconds`, during which the board may time out.
 Use `connect()` for an explicit fresh session after a peer reset or link failure.
 Neither operation retries itself. A failed write/read invalidates the client
@@ -113,7 +119,8 @@ that reopen/reset the classic Nano can query INFO again.
 All deployment parameters are explicit:
 
 - `[communication]` in `car/config.toml`: baud, serial timeouts, handshake and
-  freshness budgets, clock drift, and Pi read budget; validated by Pydantic.
+  freshness budgets, clock drift, Pi read budget, and pending event limit;
+  validated by Pydantic. Custom configurations must include `pending_event_limit`.
 - `[firmware.communication_demo]`: command/frame timeouts, status interval,
   maximum report interval, and Arduino per-poll RX/TX budgets.
 - `communication_demo/firmware.toml`: parameter requirements and bounds, board
@@ -201,6 +208,8 @@ boundary allows future alternatives, which must define their own framing rules.
 Tests cover framing/FCS, malformed and partial frames, sign conventions, session
 and sequence handling, deadlines, rollover, reporting modes, and client failures.
 A native C++ harness runs the real Arduino header with Python-generated frames.
+Regression cases cover pending and partial responses during synchronization and
+bounded event overflow.
 An optional Arduino CLI test compiles the complete demo for the Nano without
 uploading. Hardware validation still needs USB reset/reconnect, actual clock
 drift, serial throughput, and integration with the application's stop policy.
