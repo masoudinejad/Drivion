@@ -127,7 +127,9 @@ control display: move both speed and steering, then press Enter to finish.
 Enter is ignored until both controls change. Escape records `CANCELLED` without
 reporting a pass; Ctrl-C records `INTERRUPTED`, and disconnects record `FAIL`.
 The check logs axis metadata, changes in normalized demands, initialization
-time, and read count with minimum/mean/maximum read duration. It sends no driving
+time, and read count with minimum/mean/maximum read duration. Input changes are
+written only to the saved log/report so they do not flash over the live bars.
+It sends no driving
 commands and does not modify calibration. Read duration measures kernel queries
 and normalization, not physical controller-to-host latency. Refresh and idle-hint
 timing reuse `[tool.drivion.joystick_setup]` in `system/pyproject.toml`. Read

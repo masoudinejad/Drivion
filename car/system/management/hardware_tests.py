@@ -172,6 +172,7 @@ def check_joystick(root, config, log):
                     "Input demands: speed=%.3f steering=%.3f",
                     current.speed,
                     current.steering,
+                    extra={"file_only": True},
                 )
                 previous = current
             return current
@@ -215,6 +216,8 @@ def run_check(root, name, *, stream=None):
     log.propagate = False
     file_handler = logging.FileHandler(path, encoding="utf-8")
     terminal_handler = logging.StreamHandler(stream)
+    # Per-read details belong in the saved report, not over the live monitor.
+    terminal_handler.addFilter(lambda record: not getattr(record, "file_only", False))
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     for handler in (file_handler, terminal_handler):
         handler.setFormatter(formatter)

@@ -165,6 +165,7 @@ def test_joystick_requires_both_controls_and_logs_read_latency(root):
         ControlInput(0.5, 0.5),
     ]
     draws = []
+    terminal = io.StringIO()
 
     def preview(device, controls, settings, *, read):
         keys = iter(["\r", "\r", "\r"])
@@ -186,7 +187,7 @@ def test_joystick_requires_both_controls_and_logs_read_latency(root):
         patch("car.src.communication.Communication.open") as communication,
     ):
         factory.return_value.__enter__.return_value = joystick
-        transcript = run_check(root, "joystick", stream=io.StringIO())
+        transcript = run_check(root, "joystick", stream=terminal)
         factory.return_value.__exit__.assert_called_once()
         communication.assert_not_called()
     assert "PASS" in transcript
@@ -194,6 +195,9 @@ def test_joystick_requires_both_controls_and_logs_read_latency(root):
     assert "Axis metadata" in transcript
     assert "Joystick read latency ms: samples=4" in transcript
     assert "speed=0.500 steering=0.500" in transcript
+    assert "Input demands:" not in terminal.getvalue()
+    assert "PASS" in terminal.getvalue()
+    assert "Joystick read latency ms: samples=4" in terminal.getvalue()
     assert [frame[1:3] for frame in draws] == [
         (False, False),
         (True, False),
