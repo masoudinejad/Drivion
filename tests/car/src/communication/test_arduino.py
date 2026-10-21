@@ -17,11 +17,36 @@ ROOT = Path(__file__).resolve().parents[4]
 CAR = ROOT / "car"
 
 
-@pytest.fixture(scope="module")
-def firmware(tmp_path_factory):
+def compile_native(source):
+    """Compile a host harness and include compiler diagnostics in test failures."""
     compiler = shutil.which("clang++") or shutil.which("g++")
     if not compiler:
         pytest.skip("native C++ compiler unavailable")
+    executable = source.with_suffix("")
+    result = subprocess.run(
+        [
+            compiler,
+            "-std=c++11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(source.parent),
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return executable
+
+
+@pytest.fixture(scope="module")
+def firmware(tmp_path_factory):
     folder = tmp_path_factory.mktemp("communication-native")
     (folder / "Arduino.h").write_text(
         "#pragma once\n#include <stddef.h>\n#include <stdint.h>\n"
@@ -62,26 +87,7 @@ def firmware(tmp_path_factory):
         "std::cout << \"W \"; for(unsigned char c:port.tx) std::cout << std::hex << std::setfill('0') << std::setw(2) << unsigned(c);\n"
         'std::cout << std::dec << "\\n"; port.tx.clear(); } }\n'
     )
-    executable = folder / "runner"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++11",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-I",
-            str(folder),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    return executable
+    return compile_native(source)
 
 
 def run(firmware, lines):

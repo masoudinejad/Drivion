@@ -334,8 +334,8 @@ private:
     put32(payload, values_.sampleTimeMs);
     put32(payload + 4, uint32_t(values_.speedMmS));
     put16(payload + 8, uint16_t(values_.steeringCentidegrees));
-    put16(payload + 10,
-          values_.validFields & (requested ? AllFields : telemetryFields_));
+    put16(payload + 10, values_.validFields & (requested ? uint16_t(AllFields)
+                                                         : telemetryFields_));
     send(requested ? Snapshot : Telemetry,
          requested ? requestSequence : outboundSequence_++, payload,
          sizeof(payload));
