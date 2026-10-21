@@ -21,6 +21,9 @@ def root(tmp_path):
         .replace("warmup_seconds = 1.0", "warmup_seconds = 0.0")
     )
     (tmp_path / "config.toml").write_text(config)
+    (tmp_path / "system").mkdir()
+    metadata = source.parent / "system/pyproject.toml"
+    (tmp_path / "system/pyproject.toml").write_text(metadata.read_text())
     return tmp_path
 
 
@@ -118,7 +121,8 @@ def test_hardware_menu_order_and_back(root):
 
         hardware_tests_menu(root)
         select.assert_called_once_with(
-            "Hardware tests", ["Camera check", "Arduino communication check"]
+            "Hardware tests",
+            ["Camera check", "Arduino communication check", "Joystick check"],
         )
 
 
@@ -147,3 +151,108 @@ def test_missing_optional_diagnostics_settings_returns_to_management(root):
         camera.assert_not_called()
     assert pages[0][0] == "Hardware tests unavailable"
     assert "Configure [hardware_tests]" in pages[0][1]
+
+
+def test_joystick_requires_both_controls_and_logs_read_latency(root):
+    from car.src.joystick import ControlInput
+    from car.system.management.joystick_preview import preview_loop
+
+    joystick = MagicMock()
+    joystick.read.side_effect = [
+        ControlInput(0.0, 0.0),
+        ControlInput(0.0, 0.0),
+        ControlInput(0.5, 0.0),
+        ControlInput(0.5, 0.5),
+    ]
+    draws = []
+
+    def preview(device, controls, settings, *, read):
+        keys = iter(["\r", "\r", "\r"])
+        return preview_loop(
+            read,
+            lambda timeout: next(keys),
+            lambda *args: draws.append(args),
+            refresh_seconds=settings.preview_refresh_seconds,
+            idle_hint_seconds=settings.preview_idle_hint_seconds,
+        )
+
+    original = (root / "config.toml").read_bytes()
+    with (
+        patch("car.src.joystick.Joystick") as factory,
+        patch(
+            "car.system.management.joystick_preview.preview_controls",
+            side_effect=preview,
+        ),
+        patch("car.src.communication.Communication.open") as communication,
+    ):
+        factory.return_value.__enter__.return_value = joystick
+        transcript = run_check(root, "joystick", stream=io.StringIO())
+        factory.return_value.__exit__.assert_called_once()
+        communication.assert_not_called()
+    assert "PASS" in transcript
+    assert "Joystick initialization latency" in transcript
+    assert "Axis metadata" in transcript
+    assert "Joystick read latency ms: samples=4" in transcript
+    assert "speed=0.500 steering=0.500" in transcript
+    assert [frame[1:3] for frame in draws] == [
+        (False, False),
+        (True, False),
+        (True, True),
+    ]
+    assert (root / "config.toml").read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "outcome", [False, OSError("controller disconnected"), KeyboardInterrupt()]
+)
+def test_joystick_cancel_failure_and_interrupt_release_device(root, outcome):
+    from car.src.joystick import ControlInput
+
+    joystick = MagicMock()
+    joystick.read.return_value = ControlInput(0.0, 0.0)
+
+    def preview(*args, read, **kwargs):
+        read()
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    with (
+        patch("car.src.joystick.Joystick") as factory,
+        patch(
+            "car.system.management.joystick_preview.preview_controls",
+            side_effect=preview,
+        ),
+    ):
+        factory.return_value.__enter__.return_value = joystick
+        if isinstance(outcome, KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                run_check(root, "joystick", stream=io.StringIO())
+            transcript = next(
+                root.glob("system/hardware_tests/logs/joystick-*.log")
+            ).read_text()
+            assert "INTERRUPTED" in transcript
+        else:
+            transcript = run_check(root, "joystick", stream=io.StringIO())
+            assert (
+                "FAIL" if isinstance(outcome, OSError) else "CANCELLED"
+            ) in transcript
+        assert "PASS" not in transcript
+        assert "Joystick read latency ms: samples=1" in transcript
+        factory.return_value.__exit__.assert_called_once()
+
+
+def test_joystick_menu_dispatches_logged_check(root):
+    from car.system.management import hardware_tests
+
+    with (
+        patch.object(hardware_tests, "select_item", side_effect=[2, None]),
+        patch.object(hardware_tests, "open", return_value=io.StringIO(), create=True),
+        patch.object(
+            hardware_tests, "run_check", return_value="joystick report"
+        ) as check,
+        patch.object(hardware_tests, "show_page") as display,
+    ):
+        hardware_tests.hardware_tests_menu(root)
+    assert check.call_args.args == (root, "joystick")
+    display.assert_called_once_with("Joystick check", "joystick report")

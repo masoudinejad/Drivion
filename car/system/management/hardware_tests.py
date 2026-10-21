@@ -10,7 +10,7 @@ from uuid import uuid4
 import tomllib
 
 from ..ui.navigation import select_item, show_page
-from ..ui.progress import show_progress
+from ..ui.progress import show_progress, show_success
 
 
 def latency_summary(label, samples, log):
@@ -129,12 +129,73 @@ def check_arduino(root, config, settings, log):
         latency_summary("Telemetry round-trip", telemetry_samples, log)
 
 
+def check_joystick(root, config, log):
+    """Exercise calibrated controls interactively and measure host read duration.
+
+    Both controls must change before Enter can complete the check. Escape cancels;
+    disconnects fail. Read duration measures kernel queries and normalization,
+    not the physical controller's input-to-host latency. No drive targets are sent.
+    """
+    from car.src.configuration.schema import JoystickSetupConfig
+    from car.src.joystick import Joystick
+
+    from .joystick_preview import preview_controls
+
+    with (root / "system/pyproject.toml").open("rb") as source:
+        settings = JoystickSetupConfig.model_validate(
+            tomllib.load(source)["tool"]["drivion"]["joystick_setup"]
+        )
+    started = time.monotonic()
+    with Joystick(config, progress=show_progress, success=show_success) as joystick:
+        log.info(
+            "Joystick initialization latency: %.3f ms",
+            (time.monotonic() - started) * 1000,
+        )
+        log.info("Joystick settings: %s", config.model_dump())
+        log.info("Axis metadata: %s", joystick.axis_snapshot())
+        log.info(
+            "Move both controls; Enter completes after both change; Escape cancels."
+        )
+        count, total, minimum, maximum = 0, 0.0, float("inf"), 0.0
+        previous = None
+
+        def read():
+            nonlocal count, total, minimum, maximum, previous
+            before = time.monotonic()
+            current = joystick.read()
+            elapsed = time.monotonic() - before
+            count += 1
+            total += elapsed
+            minimum, maximum = min(minimum, elapsed), max(maximum, elapsed)
+            if current != previous:
+                log.info(
+                    "Input demands: speed=%.3f steering=%.3f",
+                    current.speed,
+                    current.steering,
+                )
+                previous = current
+            return current
+
+        try:
+            return preview_controls(joystick, config.controls, settings, read=read)
+        finally:
+            if count:
+                log.info(
+                    "Joystick read latency ms: samples=%d min=%.3f mean=%.3f max=%.3f",
+                    count,
+                    minimum * 1000,
+                    total / count * 1000,
+                    maximum * 1000,
+                )
+
+
 def run_check(root, name, *, stream=None):
     """Log failures and interruptions, close handlers, and return the transcript."""
     from car.src.configuration.schema import (
         CameraConfig,
         CommunicationConfig,
         HardwareTestsConfig,
+        JoystickConfig,
     )
 
     root = Path(root)
@@ -161,6 +222,7 @@ def run_check(root, name, *, stream=None):
     started = time.monotonic()
     try:
         log.info("Starting %s check; log: %s", name, path)
+        completed = True
         if name == "camera":
             check_camera(
                 root, CameraConfig.model_validate(values["camera"]), settings, log
@@ -177,9 +239,13 @@ def run_check(root, name, *, stream=None):
                 settings,
                 log,
             )
+        elif name == "joystick":
+            completed = check_joystick(
+                root, JoystickConfig.model_validate(values["joystick"]), log
+            )
         else:
             raise ValueError(f"Unknown hardware check: {name}")
-        log.info("PASS")
+        log.info("PASS" if completed else "CANCELLED")
     except KeyboardInterrupt:
         log.warning("INTERRUPTED")
         raise
@@ -195,7 +261,7 @@ def run_check(root, name, *, stream=None):
 
 def hardware_tests_menu(root):
     """Keep diagnostics together and leave room for future hardware checks."""
-    labels = ["Camera check", "Arduino communication check"]
+    labels = ["Camera check", "Arduino communication check", "Joystick check"]
     while True:
         selected = select_item("Hardware tests", labels)
         if selected is None:
@@ -208,7 +274,7 @@ def hardware_tests_menu(root):
                 "Stop driving and close other serial users. Opening serial may reset the Arduino. Run communication check?"
             ):
                 continue
-        name = ("camera", "arduino")[selected]
+        name = ("camera", "arduino", "joystick")[selected]
         with open("/dev/tty", "w", encoding="utf-8", buffering=1) as terminal:
             transcript = run_check(root, name, stream=terminal)
         show_page(labels[selected], transcript)

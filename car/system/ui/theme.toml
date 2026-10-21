@@ -31,7 +31,7 @@ N = ["█▄ █", "█ ▀█", "▀  ▀"]
 "System Info" = "View hardware and deployment details"
 Arduino = "Identify devices and manage firmware"
 Joystick = "Identify a controller and configure controls"
-"Hardware tests" = "Check camera and Arduino communication with latency logs"
+"Hardware tests" = "Check camera, Arduino and joystick with diagnostic logs"
 
 [menus.Arduino]
 "Identify and select device" = "Find a connected board"
@@ -50,3 +50,8 @@ refresh_seconds = 0.1
 speed_color = "cyan"
 steering_color = "amber"
 row_spacing = 1 # Blank lines between the two controls.
+
+[menus."Hardware tests"]
+"Camera check" = "Capture frames and measure throughput"
+"Arduino communication check" = "Verify link and telemetry round trips"
+"Joystick check" = "Live controls and read latency; no driving"

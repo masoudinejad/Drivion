@@ -43,8 +43,8 @@ def preview_loop(
         previous = current
 
 
-def preview_controls(joystick, controls, settings):
-    """Preview through the Joystick class in the shared management screen."""
+def preview_controls(joystick, controls, settings, *, read=None):
+    """Preview controls, optionally instrumenting reads through a supplied callable."""
     from car.src.configuration.schema import JoystickSetupConfig
 
     settings = JoystickSetupConfig.model_validate(settings)
@@ -74,7 +74,7 @@ def preview_controls(joystick, controls, settings):
 
         with monitor:
             return preview_loop(
-                lambda: joystick.read(controls=controls),
+                (lambda: joystick.read(controls=controls)) if read is None else read,
                 terminal.key,
                 draw,
                 refresh_seconds=refresh,

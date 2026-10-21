@@ -121,6 +121,18 @@ and correlated telemetry requests, and requires fresh status. Stop driving and
 close other serial users first: opening the port may reset the board. The check
 sends no movement targets and does not flash firmware.
 
+The **Joystick check** uses the saved controller and calibration. First select
+and configure the joystick under **Joystick** if needed. The check opens a live
+control display: move both speed and steering, then press Enter to finish.
+Enter is ignored until both controls change. Escape records `CANCELLED` without
+reporting a pass; Ctrl-C records `INTERRUPTED`, and disconnects record `FAIL`.
+The check logs axis metadata, changes in normalized demands, initialization
+time, and read count with minimum/mean/maximum read duration. It sends no driving
+commands and does not modify calibration. Read duration measures kernel queries
+and normalization, not physical controller-to-host latency. Refresh and idle-hint
+timing reuse `[tool.drivion.joystick_setup]` in `system/pyproject.toml`. Read
+statistics use constant memory, even during a long interactive check.
+
 Each run prints progress and results to the terminal and writes a separate
 UTC-timestamped `.log` file under the `[hardware_tests].log_directory` path,
 relative to the car root. Failures include tracebacks; cancellation records an
@@ -129,7 +141,8 @@ Arduino sample count, and response timeout in `[hardware_tests]` in
 `car/config.toml`; camera and serial settings come from their existing sections.
 
 Latencies are host monotonic-clock measurements in milliseconds. Every sample
-and its minimum, mean, median, and maximum are logged. Camera capture latency
+and its minimum, mean, median, and maximum are logged for camera and Arduino
+checks. Camera capture latency
 measures the blocking capture call, including frame delivery and array handling;
 it does not measure exposure-to-display latency. Initialization and configured
 warmup are excluded from capture throughput. Arduino handshake and telemetry

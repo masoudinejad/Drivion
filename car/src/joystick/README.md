@@ -145,3 +145,8 @@ injects `progress` and `success` callbacks to retain its spinner and completion
 message; importing or using the joystick does not import terminal UI modules.
 Normal development sync preserves saved calibration in the Pi configuration;
 `--replace-config` explicitly replaces it with workstation settings.
+
+For a logged hardware diagnostic, open **Hardware tests → Joystick check** in
+system management. Exercise both controls and press Enter to record a pass, or
+Escape to cancel. The log includes initialization/read timing and input changes;
+no drive targets are sent and saved calibration stays unchanged.
