@@ -229,3 +229,22 @@ drift, serial throughput, and integration with the application's stop policy.
 Connection feedback uses application logging by default. Terminal applications
 can pass `progress=show_progress` to `Communication.open` or `connect` to provide
 a context-manager callback from their own presentation layer.
+
+## Optional steering calibration extension
+
+The steering firmware implements message 11, `CALIBRATE_STEERING`, with payload
+`<BHIH`: action (uint8), raw servo pulse in microseconds (uint16), conservative
+board-clock deadline (uint32), and settings checksum (uint16). Actions are
+BEGIN=0, MOVE=1, MARK_CENTER=2, END=3, KEEP_ALIVE=4, DISABLE=5. Every command gets
+an ACK; other firmware responds UNSUPPORTED. Standard frame, session, CRC, and
+sequence checks apply before application dispatch. This additive extension keeps
+wire version 1 and does not change drive-target units.
+
+The settings checksum is the protocol FCS-16 of `<HHHHHI`: pin, minimum pulse,
+maximum pulse, initial straight pulse, maximum nudge, and steering timeout.
+It detects differing configuration snapshots; it is not authentication.
+END and DISABLE do not require an unexpired command deadline, allowing emergency
+shutdown after clock synchronization expires. All motion commands require a
+valid lease; heartbeats must repeat the current pulse and cannot move or rearm
+an expired calibration. The board blocks normal drive targets for the remainder
+of that boot after BEGIN. See the [guided calibration workflow](../../system/arduino/README.md#guided-calibration-on-the-car).

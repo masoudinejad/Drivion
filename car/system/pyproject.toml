@@ -140,3 +140,11 @@ axis_dominance_ratio = 1.5
 # Live pre-save control check; idle hints do not assert a radio sleep state.
 preview_refresh_seconds = 0.05
 preview_idle_hint_seconds = 5.0
+
+[tool.drivion.steering_calibration]
+fine_step_us = 5
+coarse_step_us = 25
+poll_interval_seconds = 0.02
+heartbeat_interval_seconds = 0.04
+ack_timeout_seconds = 0.5
+sync_interval_seconds = 0.5

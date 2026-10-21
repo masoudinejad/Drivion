@@ -1,0 +1,85 @@
+# Requirements owned by this sketch; parameter values live in car/config.toml.
+[firmware]
+version = "1.1.0"
+protocol_version = 1
+fqbn = "arduino:avr:nano:cpu=atmega328"
+
+[parameters.COMMAND_TIMEOUT_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.FRAME_TIMEOUT_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.STATUS_INTERVAL_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.MAX_TELEMETRY_INTERVAL_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.RX_BUDGET_BYTES]
+type = "integer"
+minimum = 1
+maximum = 65535
+
+[parameters.TX_BUDGET_BYTES]
+type = "integer"
+minimum = 1
+maximum = 65535
+
+[parameters.STEERING_LEFT_DEG]
+type = "number"
+minimum = 0.01
+maximum = 327.68
+
+[parameters.STEERING_RIGHT_DEG]
+type = "number"
+minimum = 0.01
+maximum = 327.67
+
+[parameters.SERVO_LEFT_DEG]
+type = "number"
+minimum = 0
+maximum = 180
+
+[parameters.SERVO_CENTER_DEG]
+type = "number"
+minimum = 0
+maximum = 180
+
+[parameters.SERVO_RIGHT_DEG]
+type = "number"
+minimum = 0
+maximum = 180
+
+[parameters.SERVO_PIN]
+type = "integer"
+minimum = 2
+maximum = 19
+
+[parameters.STEERING_TIMEOUT_MS]
+type = "integer"
+minimum = 1
+maximum = 2147483647
+
+[parameters.SERVO_MIN_US]
+type = "integer"
+minimum = 544
+maximum = 2400
+
+[parameters.SERVO_MAX_US]
+type = "integer"
+minimum = 544
+maximum = 2400
+
+[parameters.CALIBRATION_STEP_US]
+type = "integer"
+minimum = 1
+maximum = 100

@@ -200,6 +200,14 @@ class Communication:
         if not -327.68 <= steering_deg <= 327.67:
             raise ValueError("steering angle exceeds wire range")
         angle = round(steering_deg * 100)
+        return self._send(
+            wire.MessageType.DRIVE_TARGET,
+            wire.TARGET.pack(speed_mm_s, angle, self.command_deadline()),
+        )
+
+    def command_deadline(self) -> int:
+        """Conservative board deadline shared by drive and calibration commands."""
+        self._require_session()
         elapsed = self.clock() - self._connected_at
         uncertainty_ms = self._rtt * 1000 + elapsed * self.config.clock_drift_ppm / 1000
         if (
@@ -209,14 +217,45 @@ class Communication:
             raise TimeoutError(
                 "session clock estimate expired; call synchronize to refresh"
             )
-        deadline = (
+        return (
             self._board_time
             + math.floor(elapsed * 1000 - uncertainty_ms)
             + self.config.command_validity_ms
         ) & 0xFFFFFFFF
+
+    def calibrate_steering(
+        self, action: wire.CalibrationAction, pulse_us: int, signature: int
+    ) -> int:
+        """Send an acknowledged, optional raw-servo calibration command."""
+        self._require_session()
+        if (
+            not isinstance(action, wire.CalibrationAction)
+            or type(pulse_us) is not int
+            or not 0 <= pulse_us <= 65535
+            or type(signature) is not int
+            or not 0 <= signature <= 65535
+        ):
+            raise ValueError("Invalid steering calibration command")
         return self._send(
-            wire.MessageType.DRIVE_TARGET, wire.TARGET.pack(speed_mm_s, angle, deadline)
+            wire.MessageType.CALIBRATE_STEERING,
+            wire.CALIBRATION.pack(
+                action,
+                pulse_us,
+                0
+                if action
+                in (wire.CalibrationAction.END, wire.CalibrationAction.DISABLE)
+                else self.command_deadline(),
+                signature,
+            ),
         )
+
+    def set_normalized_target(
+        self, speed_mm_s: int, steering: float, parameters: dict
+    ) -> int:
+        """Send normalized steering using config.firmware["steering"] calibration."""
+        from .steering import steering_degrees
+
+        return self.set_target(speed_mm_s, steering_degrees(steering, parameters))
 
     def stop(self) -> int:
         """Request a stop event; the Arduino application chooses actuator behavior."""

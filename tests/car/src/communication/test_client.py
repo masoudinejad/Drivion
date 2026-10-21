@@ -346,3 +346,21 @@ def test_repeated_synchronization_preserves_events_until_poll(client):
         )
         comm.synchronize()
     assert [event.request_sequence for event in comm.poll()] == [0, 1]
+
+
+def test_calibration_extension_and_emergency_after_clock_expiry(client):
+    comm, peer, clock = client
+    sequence = comm.calibrate_steering(wire.CalibrationAction.MOVE, 1525, 12345)
+    frame = peer.sent[-1]
+    assert (frame.kind, frame.sequence) == (
+        wire.MessageType.CALIBRATE_STEERING,
+        sequence,
+    )
+    action, pulse, deadline, signature = wire.CALIBRATION.unpack(frame.payload)
+    assert (action, pulse, signature) == (1, 1525, 12345)
+    assert 1000 < deadline <= 1150
+    clock.now += comm.config.max_session_age_seconds
+    with pytest.raises(TimeoutError):
+        comm.calibrate_steering(wire.CalibrationAction.MOVE, 1525, 12345)
+    comm.calibrate_steering(wire.CalibrationAction.DISABLE, 0, 12345)
+    assert wire.CALIBRATION.unpack(peer.sent[-1].payload) == (5, 0, 0, 12345)

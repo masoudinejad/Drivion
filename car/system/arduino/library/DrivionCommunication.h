@@ -20,7 +20,8 @@ enum Message : uint8_t {
   Telemetry = 7,
   Status = 8,
   Ack = 9,
-  Snapshot = 10
+  Snapshot = 10,
+  CalibrateSteering = 11
 };
 enum Result : uint8_t {
   Ok = 0,
@@ -62,6 +63,10 @@ struct ReportedValues {
   uint16_t validFields;
 };
 using Handler = void (*)(void *context, Event event, const Target &target);
+// Optional application extension, still protected by framing/session/sequence
+// checks.
+using CalibrationHandler = Result (*)(void *context, const uint8_t *payload,
+                                      uint16_t size, uint32_t now);
 
 inline void put16(uint8_t *p, uint16_t v) {
   p[0] = v;
@@ -103,15 +108,17 @@ inline uint16_t checksum(const uint8_t *data, size_t size) {
 template <typename SerialPort> class Communication {
 public:
   Communication(SerialPort &serial, const Settings &settings, Handler handler,
-                void *context)
+                void *context, CalibrationHandler calibrationHandler = nullptr)
       : serial_(serial), settings_(settings), handler_(handler),
-        context_(context) {}
+        calibrationHandler_(calibrationHandler), context_(context) {}
 
   bool begin() {
     enabled_ = settings_.valid() && handler_ != nullptr;
     return enabled_;
   }
   bool commandActive() const { return commandActive_; }
+  // Calibration may latch motion off until the board is restarted/reflashed.
+  void disableMotion() { motionEnabled_ = commandActive_ = false; }
   uint32_t session() const { return session_; }
   uint32_t rejectedFrames() const { return rejectedFrames_; }
   const Target &target() const { return target_; }
@@ -126,7 +133,7 @@ public:
   }
 
   // Invoke frequently from loop(); callbacks must be short and must not
-  // call other methods except publish(), which may update reports immediately.
+  // call other methods except publish() and disableMotion().
   void poll(uint32_t now) {
     if (!enabled_)
       return;
@@ -182,6 +189,8 @@ private:
   SerialPort &serial_;
   Settings settings_;
   Handler handler_;
+  CalibrationHandler calibrationHandler_;
+  bool motionEnabled_ = true;
   void *context_;
   bool enabled_ = false, commandActive_ = false, haveCommand_ = false;
   uint32_t session_ = 0, lastCommandAt_ = 0, commandDeadline_ = 0;
@@ -276,7 +285,17 @@ private:
     haveRequest_ = true;
     lastRequest_ = sequence;
     switch (type) {
+    case CalibrateSteering:
+      acknowledge(type, sequence,
+                  calibrationHandler_
+                      ? calibrationHandler_(context_, payload, size, now)
+                      : Unsupported);
+      return;
     case DriveTarget: {
+      if (!motionEnabled_) {
+        acknowledge(type, sequence, Busy);
+        return;
+      }
       if (size != 10) {
         acknowledge(type, sequence, BadPayload);
         return;

@@ -16,6 +16,8 @@ TELEMETRY_CONFIG = struct.Struct("<IH")
 TELEMETRY = struct.Struct("<IihH")
 STATUS = struct.Struct("<IBHI")
 ACK = struct.Struct("<BB")
+# Optional steering firmware extension: action, pulse microseconds, board deadline.
+CALIBRATION = struct.Struct("<BHIH")
 
 
 class MessageType(IntEnum):
@@ -29,6 +31,16 @@ class MessageType(IntEnum):
     STATUS = 8
     ACK = 9
     SNAPSHOT = 10
+    CALIBRATE_STEERING = 11
+
+
+class CalibrationAction(IntEnum):
+    BEGIN = 0
+    MOVE = 1
+    MARK_CENTER = 2
+    END = 3
+    KEEP_ALIVE = 4
+    DISABLE = 5
 
 
 class Fields(IntFlag):

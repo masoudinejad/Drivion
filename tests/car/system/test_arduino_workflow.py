@@ -188,6 +188,8 @@ def test_submenu_dispatches_change_firmware_second(car_root):
             "Identify and select device",
             "Change firmware",
             "Check firmware",
+            "Configure steering servo",
+            "Guided servo calibration",
         ]
         return next(choices)
 

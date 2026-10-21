@@ -86,3 +86,27 @@ log_directory = "system/hardware_tests/logs"
 camera_frames = 30
 arduino_samples = 10
 response_timeout_seconds = 2.0
+
+# Servo calibration is compiled into the steering firmware; reflash after edits.
+[firmware.steering]
+COMMAND_TIMEOUT_MS = 1000
+FRAME_TIMEOUT_MS = 100
+STATUS_INTERVAL_MS = 100
+MAX_TELEMETRY_INTERVAL_MS = 60000
+RX_BUDGET_BYTES = 32
+TX_BUDGET_BYTES = 32
+# Positive physical steering magnitudes for normalized -1 / +1 input.
+STEERING_LEFT_DEG = 30.0
+STEERING_RIGHT_DEG = 30.0
+# Absolute servo positions: reverse direction by exchanging left and right.
+SERVO_LEFT_DEG = 60.0
+SERVO_CENTER_DEG = 90.0
+SERVO_RIGHT_DEG = 120.0
+SERVO_PIN = 9
+STEERING_TIMEOUT_MS = 1000
+# Check the servo datasheet before changing these pulse widths.
+SERVO_MIN_US = 1000
+SERVO_MAX_US = 2000
+
+# Maximum raw pulse change accepted in a single calibration movement.
+CALIBRATION_STEP_US = 25

@@ -37,6 +37,8 @@ Joystick = "Identify a controller and configure controls"
 "Identify and select device" = "Find a connected board"
 "Change firmware" = "Compile and flash a registered sketch"
 "Check firmware" = "Verify the running firmware"
+"Configure steering servo" = "Edit servo settings and physical steering limits"
+"Guided servo calibration" = "Find straight, direction, and travel limits on the car"
 
 [menus.Joystick]
 "Identify and select device" = "Find and save a connected controller"

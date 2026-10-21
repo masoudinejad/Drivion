@@ -8,6 +8,7 @@ from ...ui.progress import run_background
 from ..device.check import check_firmware, format_summary
 from ..device.discovery import discover
 from .workflow import change_firmware
+from .steering import configure_steering
 
 
 def identify_device(car_root, *, select=select_item, display=show_page):
@@ -86,12 +87,25 @@ def check_firmware_page(car_root, *, display=show_page):
         display("Firmware check failed", str(error))
 
 
+def guided_calibration(car_root):
+    """Load runtime serial/config dependencies only when the live wizard is used."""
+    try:
+        from .calibration import guided_calibration as run
+    except ImportError as error:
+        raise RuntimeError(
+            "Run management in the configured car Python environment to calibrate a servo."
+        ) from error
+    run(car_root)
+
+
 def arduino_menu(car_root, *, select=select_item):
     """Host Arduino operations, with identification as the first menu entry."""
     actions = (
         ("Identify and select device", identify_device),
         ("Change firmware", change_firmware),
         ("Check firmware", check_firmware_page),
+        ("Configure steering servo", configure_steering),
+        ("Guided servo calibration", guided_calibration),
     )
     while True:
         selected = select("Arduino", [label for label, action in actions])

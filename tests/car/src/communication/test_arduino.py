@@ -395,3 +395,24 @@ def test_demo_timeout_invalidates_same_poll_snapshot(demo_firmware):
     snapshots = [frame for frame in frames if frame.kind == wire.MessageType.SNAPSHOT]
     assert wire.TELEMETRY.unpack(snapshots[0].payload) == (1, 100, 200, 3)
     assert wire.TELEMETRY.unpack(snapshots[1].payload)[-1] == 0
+
+
+def test_calibration_extension_is_optional(firmware):
+    events, frames = run(
+        firmware,
+        [
+            packet(0, wire.MessageType.HELLO, 0),
+            packet(
+                1,
+                wire.MessageType.CALIBRATE_STEERING,
+                1,
+                wire.CALIBRATION.pack(0, 1500, 150, 0),
+            ),
+        ],
+    )
+    assert [event[0] for event in events] == [3]
+    ack = next(frame for frame in frames if frame.kind == wire.MessageType.ACK)
+    assert wire.ACK.unpack(ack.payload) == (
+        wire.MessageType.CALIBRATE_STEERING,
+        wire.ErrorCode.UNSUPPORTED,
+    )
