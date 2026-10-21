@@ -23,6 +23,7 @@ rsync_excludes = [
     ".venv/",
     "__pycache__/",
     "*.pyc",
+    "*.log",
     ".env",
     ".env.*",
     ".git/",
@@ -38,3 +39,12 @@ rsync_excludes = [
 python_extensions = [".py", ".pyi"]
 markdown_extensions = [".md"]
 cpp_extensions = [".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".ino"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "N"]
+
+[tool.ruff.lint.per-file-ignores]
+# Direct launchers establish their import root before importing project modules.
+"car/system/manage.py" = ["E402"]
+"car/system/ui/test_ui.py" = ["E402"]
+"dev/ansible/run.py" = ["E402"]

@@ -43,6 +43,10 @@ uv run --project dev python dev/quality/format_all.py --check
 uv run --project dev pytest
 ```
 
+GitHub Actions runs the formatting checks and local test suite on Python 3.11
+and 3.13 for pushes and pull requests. Hardware validation remains separate.
+Ruff settings live in `dev/pyproject.toml`, including naming-convention checks.
+
 The formatting tool uses Ruff for Python, markdownlint for Markdown, and
 clang-format for C/C++ and Arduino sketches. Fix remaining lint failures,
 review formatter edits, and stage the changes intentionally. See the

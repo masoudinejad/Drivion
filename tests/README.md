@@ -24,3 +24,8 @@ Native firmware tests require clang++ or g++; Arduino compilation smoke tests
 require Arduino CLI and the Arduino AVR core. These tests skip when the
 corresponding toolchain is unavailable. The suite does not flash connected
 hardware; validate physical-device behavior separately when relevant.
+
+The GitHub Actions quality workflow runs formatting and local tests on Python
+3.11 and 3.13. Arduino CLI smoke tests may skip when the AVR toolchain is absent;
+these checks and physical-device validation must be run on a provisioned target
+before claiming firmware or performance validation.

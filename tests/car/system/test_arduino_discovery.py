@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import tomllib
 
+from car.system.information.update import render_info
 from car.system.arduino.device.discovery import (
     compact_report,
     discover,
@@ -39,8 +40,6 @@ def test_lightweight_discovery_avoids_core_and_board_detail_commands(tmp_path):
     assert report["ports"][0]["identification"] == "candidate"
     assert "cores" not in report
 
-
-from car.system.information.update import render_info
 
 ROOT = Path(__file__).resolve().parents[3] / "car"
 

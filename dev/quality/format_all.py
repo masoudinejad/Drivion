@@ -55,9 +55,25 @@ def main():
     cpp = [name for name in files if Path(name).suffix in cpp_extensions]
     commands = []
     if python:
-        commands.append(["ruff", "check", *([] if args.check else ["--fix"]), *python])
         commands.append(
-            ["ruff", "format", *(["--check"] if args.check else []), *python]
+            [
+                "ruff",
+                "check",
+                "--config",
+                "dev/pyproject.toml",
+                *([] if args.check else ["--fix"]),
+                *python,
+            ]
+        )
+        commands.append(
+            [
+                "ruff",
+                "format",
+                "--config",
+                "dev/pyproject.toml",
+                *(["--check"] if args.check else []),
+                *python,
+            ]
         )
     if markdown:
         executable = ROOT / "dev/node_modules/.bin/markdownlint-cli2"

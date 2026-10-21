@@ -114,7 +114,10 @@ class DriveMonitor:
         empty, fill, centre = (".", "#", "|") if self.ascii_only else ("░", "█", "│")
         count = 0 if value is None else round(abs(value) * cells)
         active = self._paint(fill * count, color)
-        track = lambda size: self._paint(empty * size, "gray")
+
+        def track(size):
+            return self._paint(empty * size, "gray")
+
         if not signed:
             return active + track(cells - count)
         left = (
