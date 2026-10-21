@@ -71,11 +71,30 @@ def software_toml(record):
 
 
 # Executed on the Pi via SSH. The deployed utility performs the atomic update.
-PUBLISH_SCRIPT = """import os, pathlib, subprocess, sys
+PUBLISH_SCRIPT = """import os, pathlib, subprocess, sys, tempfile
 root = pathlib.Path(sys.argv[1])
 system = root / "system"
 if root.is_symlink() or system.is_symlink():
     raise ValueError("System information destination must not be a symlink")
+# Initialize only a missing configuration. Existing Pi settings survive sync.
+config = root / "config.toml"
+defaults = root / "config.defaults.toml"
+if config.is_symlink() or defaults.is_symlink():
+    raise ValueError("Configuration must not be a symlink")
+if not config.exists() and defaults.is_file():
+    # Publish a separate complete copy without overwriting concurrent setup.
+    with tempfile.NamedTemporaryFile(dir=root, delete=False) as stream:
+        temporary = pathlib.Path(stream.name)
+        stream.write(defaults.read_bytes())
+    try:
+        temporary.chmod(0o644)
+        try:
+            os.link(temporary, config)
+        except FileExistsError:
+            pass
+    finally:
+        temporary.unlink()
+
 environment = os.environ.copy()
 environment["PYTHONPATH"] = str(root)
 subprocess.run(

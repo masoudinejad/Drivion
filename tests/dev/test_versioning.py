@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import tomllib
 
 from dev.sync import sync_car, versioning
@@ -52,10 +53,15 @@ def test_git_release_and_dirty_state(tmp_path):
     assert versioning.git_version(tmp_path)["dirty"]
 
 
-def test_publish_is_atomic_and_collects_system_info(tmp_path):
+@pytest.mark.parametrize("initialize", [False, True])
+def test_publish_is_atomic_and_collects_system_info(tmp_path, initialize):
     (tmp_path / "system").mkdir()
     source = Path(versioning.__file__).parents[2] / "car"
-    shutil.copy(source / "config.toml", tmp_path / "config.toml")
+    shutil.copy(source / "config.toml", tmp_path / "config.defaults.toml")
+    if not initialize:
+        shutil.copy(source / "config.toml", tmp_path / "config.toml")
+        with (tmp_path / "config.toml").open("a") as stream:
+            stream.write("\n# Pi-specific calibration is preserved\n")
     shutil.copy(source / "system/__init__.py", tmp_path / "system/__init__.py")
     shutil.copy(
         source / "system/configuration.py", tmp_path / "system/configuration.py"
@@ -81,6 +87,11 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path):
     )
     info = tomllib.loads((tmp_path / "system/info.toml").read_text())
     assert info["software"] == record
+    deployed_config = (tmp_path / "config.toml").read_text()
+    assert ("Pi-specific calibration" in deployed_config) is (not initialize)
+    assert (tmp_path / "config.toml").stat().st_ino != (
+        tmp_path / "config.defaults.toml"
+    ).stat().st_ino
     assert info["hardware"] == {
         "model": "Raspberry Pi Test",
         "serial_number": "00000000a4f29c",

@@ -159,7 +159,8 @@ def _safe_absolute_path(value, label):
     return path
 
 
-def _safe_relative_path(value, label):
+def safe_relative_path(value, label):
+    """Validate a relative POSIX path shared by bootstrap and deployment tools."""
     if not isinstance(value, str):
         raise TypeError(f"{label} must be a string")
     path = PurePosixPath(value)
@@ -187,7 +188,7 @@ def arduino_settings(car_root, *, values=None):
         or (settings.address and not settings.address.isprintable())
     ):
         raise ValueError("Configure a printable arduino.address")
-    sketchbook = _safe_relative_path(
+    sketchbook = safe_relative_path(
         settings.sketchbook_directory, "arduino.sketchbook_directory"
     )
     if not sketchbook.is_relative_to(PurePosixPath("system/arduino")):
@@ -237,7 +238,7 @@ def arduino_toolchain_settings(car_root, *, values=None):
     ):
         raise ValueError("Configure a valid Arduino core identifier")
     paths = {
-        name: _safe_relative_path(
+        name: safe_relative_path(
             getattr(settings, name), f"tool.drivion.arduino.{name}"
         )
         for name in ("data_directory", "download_directory", "config_path")

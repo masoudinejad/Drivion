@@ -60,6 +60,11 @@ class SyncTests(unittest.TestCase):
             environment.mkdir(parents=True)
             (environment / "marker").write_text("keep")
             (target / ".env").write_text("keep")
+            diagnostics = target / "system/hardware_tests/logs/check.log"
+            diagnostics.parent.mkdir(parents=True)
+            diagnostics.write_text("saved diagnostics")
+            (source / "config.toml").write_text("workstation defaults")
+            (target / "config.toml").write_text("Pi calibration")
             for name in ("logs", "build"):
                 generated = target / "system/arduino" / name
                 generated.mkdir(parents=True)
@@ -81,6 +86,18 @@ class SyncTests(unittest.TestCase):
             )
             self.assertFalse((target / "old.py").exists())
             self.assertEqual((target / "drive.py").read_text(), "new")
+            self.assertEqual(diagnostics.read_text(), "saved diagnostics")
+            self.assertEqual((target / "config.toml").read_text(), "Pi calibration")
+            replacement = sync_car.build_command(self.settings, replace_config=True)
+            subprocess.run(
+                replacement[: replacement.index("-e")]
+                + [str(source) + "/", str(target) + "/"],
+                check=True,
+                capture_output=True,
+            )
+            self.assertEqual(
+                (target / "config.toml").read_text(), "workstation defaults"
+            )
             self.assertTrue((target / "drive.py").stat().st_mode & 0o100)
             self.assertEqual((environment / "marker").read_text(), "keep")
             self.assertEqual((target / ".env").read_text(), "keep")

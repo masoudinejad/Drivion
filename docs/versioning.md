@@ -60,3 +60,8 @@ cat ~/car/system/info.toml
 ```
 
 Python consumers can read it with the standard `tomllib` module on Python 3.11+.
+
+Normal sync hashes the transferred code and `config.defaults.toml`; the preserved
+Pi `config.toml` is runtime state outside that code checksum. With
+`--replace-config`, the transferred active configuration is included too. A
+first deployment initializes the active configuration from the defaults.

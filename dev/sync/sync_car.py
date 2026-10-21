@@ -51,6 +51,16 @@ def tool_settings():
     ):
         path = validate_directory(car_config[section][key], key)
         excludes.append(f"/{path.as_posix()}/")
+    with (CAR_DIR / "config.toml").open("rb") as stream:
+        diagnostics = tomllib.load(stream).get("hardware_tests")
+    if diagnostics is not None:
+        from car.system.configuration import safe_relative_path
+
+        path = safe_relative_path(
+            diagnostics["log_directory"], "hardware_tests.log_directory"
+        )
+        # Protect generated logs, not arbitrary source trees chosen as a log path.
+        excludes.append(f"/{path.as_posix()}/*.log")
     return timeout, tuple(excludes)
 
 
@@ -98,7 +108,9 @@ def read_settings(path):
     return settings
 
 
-def build_command(settings, dry_run=False, password=False, source=None):
+def build_command(
+    settings, dry_run=False, password=False, source=None, *, replace_config=False
+):
     for key in ("PI_HOST", "PI_USER"):
         if not settings.get(key):
             raise ValueError(f"Set {key} in dev/sync/.env")
@@ -123,6 +135,9 @@ def build_command(settings, dry_run=False, password=False, source=None):
         key = public_key_path(settings["PI_SSH_PUBLIC_KEY"])
         ssh += " -o IdentitiesOnly=yes -i " + shlex.quote(str(key))
     command = ["rsync", "-rlptz", "--checksum", "--delete", "--itemize-changes"]
+    if not replace_config:
+        # Hide the workstation config and protect the Pi copy from deletion.
+        command.extend(["--filter", "P /config.toml", "--filter", "H /config.toml"])
     if password:
         command = ["sshpass", "-e"] + command
     if dry_run:
@@ -142,13 +157,23 @@ def build_command(settings, dry_run=False, password=False, source=None):
     return command
 
 
-def sync_versioned(settings, environment, dry_run=False, password=False):
+def sync_versioned(
+    settings, environment, dry_run=False, password=False, *, replace_config=False
+):
     record = versioning.git_version(CAR_DIR.parent)
     with tempfile.TemporaryDirectory(prefix="drivion-car-") as directory:
         snapshot = Path(directory) / "car"
         versioning.snapshot_car(CAR_DIR, snapshot, EXCLUDES)
+        # Ship defaults separately; the active Pi configuration is runtime state.
+        config = snapshot / "config.toml"
+        if config.exists():
+            shutil.copyfile(config, snapshot / "config.defaults.toml")
+            if not replace_config:
+                config.unlink()
         record["checksum_sha256"] = versioning.snapshot_checksum(snapshot)
-        command = build_command(settings, dry_run, password, snapshot)
+        command = build_command(
+            settings, dry_run, password, snapshot, replace_config=replace_config
+        )
         result = subprocess.run(command, env=environment, check=False)
         if result.returncode or dry_run:
             return result.returncode
@@ -238,9 +263,16 @@ def main(argv=None):
         action="store_true",
         help="Use PI_PASSWORD through sshpass instead of normal SSH authentication",
     )
+    parser.add_argument(
+        "--replace-config",
+        action="store_true",
+        help="Explicitly replace Pi settings and calibration with local config.toml",
+    )
     args = parser.parse_args(argv)
     if args.public_key and not args.setup_ssh_key:
         parser.error("--public-key requires --setup-ssh-key")
+    if args.replace_config and args.setup_ssh_key:
+        parser.error("--replace-config cannot be combined with --setup-ssh-key")
     if args.dry_run and args.setup_ssh_key:
         parser.error("--dry-run cannot be combined with --setup-ssh-key")
     try:
@@ -283,7 +315,13 @@ def main(argv=None):
         if args.setup_ssh_key:
             status = subprocess.run(command, env=environment, check=False).returncode
         else:
-            status = sync_versioned(settings, environment, args.dry_run, args.password)
+            status = sync_versioned(
+                settings,
+                environment,
+                args.dry_run,
+                args.password,
+                replace_config=args.replace_config,
+            )
         if status:
             print(f"Command failed (exit code {status}).", file=sys.stderr)
         return status

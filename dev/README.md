@@ -44,9 +44,23 @@ library, so environment activation is unnecessary. Alternatively, run `uv run
 Only `car/` is transferred. Changed files and deletions are shown, executable
 permissions are preserved, and missing destination directories are created.
 Virtual environments, Python caches, Git metadata, `.ssh`, and `.env` files are
-excluded and preserved on the Pi. `car/config.toml` is mirrored, so local
-settings replace the remote copy. Runtime data folders should be added to the
-exclusions when their locations are defined.
+excluded and preserved on the Pi. Firmware artifacts and diagnostic
+`*.log` files are also protected, including logs under a Pi-specific path.
+
+Normal sync preserves the Pi's `car/config.toml`, including controller selection
+and calibration. The local configuration is shipped as `config.defaults.toml`
+and installed atomically only when the Pi has no active configuration. To apply
+local configuration changes deliberately, preview and then run:
+
+```sh
+uv run --project dev python dev/sync/sync_car.py --replace-config --dry-run
+uv run --project dev python dev/sync/sync_car.py --replace-config
+```
+
+`--replace-config` replaces all settings, including Pi calibration. Back up any
+settings you need first. When configuration schema requirements change, migrate
+the Pi configuration or explicitly replace it before starting the new runtime.
+Runtime data folders should be added to the exclusions as features define them.
 
 The Pi also needs Python 3 to publish the generated `system/info.toml` record
 after a successful transfer. The record combines deployment data with current
