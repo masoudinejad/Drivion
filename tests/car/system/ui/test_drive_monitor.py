@@ -130,3 +130,21 @@ def test_terminal_restores_on_failure(monkeypatch):
 def test_status_text_cannot_inject_terminal_commands():
     frame = monitor().render(0, 0, status="Bad\033[2J\nstatus")
     assert "\033" not in frame
+
+
+def test_live_width_uses_actual_output_terminal(monkeypatch):
+    import os
+
+    from car.system.ui import drive_monitor as module
+
+    stream = io.StringIO()
+    stream.fileno = lambda: 42
+    monkeypatch.setattr(
+        module.os, "get_terminal_size", lambda fd: os.terminal_size((32, 24))
+    )
+    monkeypatch.setattr(
+        module.shutil, "get_terminal_size", lambda: os.terminal_size((80, 24))
+    )
+    with monitor(stream=stream) as display:
+        display.update(0.7, -0.3)
+    assert all(len(line) <= 32 for line in stream.getvalue().splitlines())

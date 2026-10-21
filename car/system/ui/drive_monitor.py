@@ -277,7 +277,12 @@ class DriveMonitor:
             and now - self._last_draw < self.refresh_seconds
         ):
             return False
-        presentation.setdefault("columns", shutil.get_terminal_size().columns)
+        if "columns" not in presentation:
+            try:
+                columns = os.get_terminal_size(self.stream.fileno()).columns
+            except (AttributeError, OSError, ValueError):
+                columns = 0
+            presentation["columns"] = columns or shutil.get_terminal_size().columns
         frame = self.render(speed, steering, **presentation)
         if self.interactive:
             self.stream.write(

@@ -233,6 +233,9 @@ with DriveMonitor(
     monitor.update(0.7, -0.3, status="Manual control")
 ```
 
+The UI reads dimensions from its actual output terminal, so redirecting stdout
+does not force a default width on a narrower controlling terminal.
+
 The application owns input polling, timing, and vehicle control. The monitor
 never reads input, sleeps, or starts a worker. `update` limits terminal redraws
 to the UI refresh interval; it returns whether a frame was drawn. Use
@@ -253,3 +256,16 @@ Use a context manager to restore the cursor and screen on exit.
 The compact gauges and separate status row take layout inspiration from the
 [CarStream CLI dashboard](https://pypi.org/project/carstream-cli/). This display
 uses the project's existing UI code and requires no extra dependency.
+
+## Keyboard input for live views
+
+`terminal.py` provides `terminal_input()`, shared by joystick preview and saved
+control checks. The context exposes `stream` for the display and `key(timeout)`
+for bounded keyboard polling. No key returns `None`; Enter and Escape are
+returned as characters. Ctrl-C raises `KeyboardInterrupt`, and closed input
+raises `RuntimeError`. Input is read directly from the descriptor to avoid
+text-buffering surprises when polling with `select`.
+
+The helper restores the previous terminal mode on normal exit, cancellation,
+and failures, including failures during display initialization. `DriveMonitor`
+continues to own cursor/screen presentation; the keyboard helper does not.

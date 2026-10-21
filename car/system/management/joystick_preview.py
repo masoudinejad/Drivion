@@ -1,12 +1,9 @@
 """Live normalized control bars for checking unsaved joystick settings."""
 
-import os
-import select
-import termios
 import time
-import tty
 
 from ..ui.drive_monitor import DriveMonitor
+from ..ui.terminal import terminal_input
 
 
 def preview_loop(
@@ -48,22 +45,16 @@ def preview_loop(
 
 def preview_controls(joystick, controls, settings):
     """Preview through the Joystick class in the shared management screen."""
-    refresh = settings["preview_refresh_seconds"]
-    idle = settings["preview_idle_hint_seconds"]
-    if not 0 < refresh <= 1 or not 0 < idle < float("inf"):
-        raise ValueError("Configure finite positive joystick preview timings.")
-    if os.environ.get("TERM") == "dumb":
-        raise RuntimeError("Joystick preview requires an interactive ANSI terminal.")
-    with (
-        open("/dev/tty", encoding="utf-8") as reader,
-        open("/dev/tty", "w", encoding="utf-8", buffering=1) as terminal,
-    ):
-        saved = termios.tcgetattr(reader.fileno())
+    from car.src.configuration.schema import JoystickSetupConfig
+
+    settings = JoystickSetupConfig.model_validate(settings)
+    refresh, idle = settings.preview_refresh_seconds, settings.preview_idle_hint_seconds
+    with terminal_input() as terminal:
         monitor = DriveMonitor(
             allow_reverse=controls.allow_reverse,
             speed_mode=controls.speed_mode,
             steering_mode=controls.steering_mode,
-            stream=terminal,
+            stream=terminal.stream,
         )
 
         def draw(current, speed_tested, steering_tested, inactive):
@@ -81,19 +72,11 @@ def preview_controls(joystick, controls, settings):
                 footer=("Enter Continue after checking both / Esc Cancel",),
             )
 
-        def key(timeout):
-            ready, _, _ = select.select([reader], [], [], timeout)
-            return reader.read(1) if ready else None
-
         with monitor:
-            try:
-                tty.setcbreak(reader.fileno())
-                return preview_loop(
-                    lambda: joystick.read(controls=controls),
-                    key,
-                    draw,
-                    refresh_seconds=refresh,
-                    idle_hint_seconds=idle,
-                )
-            finally:
-                termios.tcsetattr(reader.fileno(), termios.TCSADRAIN, saved)
+            return preview_loop(
+                lambda: joystick.read(controls=controls),
+                terminal.key,
+                draw,
+                refresh_seconds=refresh,
+                idle_hint_seconds=idle,
+            )

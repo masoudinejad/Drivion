@@ -12,7 +12,7 @@ from car.src.configuration.schema import JoystickAxisConfig
 from car.src.joystick import ControlInput, Joystick
 from car.src.joystick.discovery import Controller
 from car.src.joystick.joystick import interpret_axis
-from car.system.management.joystick_setup import calibrate_axis, configure_controls
+from car.system.management.joystick_setup import configure_controls
 
 
 @pytest.fixture
@@ -206,21 +206,6 @@ def snapshot(speed=0, steering=0):
     return {"ABS_Y": axis(speed), "ABS_RX": axis(steering)}
 
 
-@pytest.mark.parametrize(
-    "negative,positive",
-    [
-        (snapshot(), snapshot()),
-        (snapshot(-100, -100), snapshot(100, 100)),
-        (snapshot(0, 50), snapshot(0, 100)),
-    ],
-)
-def test_calibration_rejects_insufficient_ambiguous_or_wrong_direction(
-    negative, positive
-):
-    with pytest.raises(ValueError):
-        calibrate_axis(snapshot(), negative, positive, 0.25, 1.5)
-
-
 @pytest.mark.parametrize("cancel_at", list(range(12)) + [None])
 def test_guided_setup_saves_atomically_or_cancels(tmp_path, settings, cancel_at):
     path = tmp_path / "config.toml"
@@ -320,49 +305,6 @@ def test_changed_range_closes_device(settings, runtime):
     assert feedback == ["Initializing joystick"]
 
 
-@pytest.mark.parametrize(
-    "negative,positive,expected,inverted",
-    [
-        (snapshot(-60, -100), snapshot(60, 100), "ABS_RX", False),
-        (snapshot(50, -100), snapshot(30, 100), "ABS_RX", False),
-        (snapshot(100, -60), snapshot(-100, 60), "ABS_Y", True),
-    ],
-)
-def test_calibration_tolerates_perpendicular_motion(
-    negative, positive, expected, inverted
-):
-    result = calibrate_axis(snapshot(), negative, positive, 0.25, 1.5)
-    assert result.axis == expected
-    assert result.inverted == inverted
-    assert (result.minimum, result.centre, result.maximum) == (-100, 0, 100)
-
-
-@pytest.mark.parametrize(
-    "negative,positive",
-    [
-        (snapshot(-80, -100), snapshot(80, 100)),  # Near diagonal.
-        (snapshot(-20, -100), snapshot(100, 60)),  # Different dominant endpoints.
-        (snapshot(100, -60), snapshot(100, 60)),  # Strong one-sided interference.
-    ],
-)
-def test_calibration_rejects_ambiguous_or_conflicting_motion(negative, positive):
-    with pytest.raises(ValueError, match="dominant"):
-        calibrate_axis(snapshot(), negative, positive, 0.25, 1.5)
-
-
-def test_calibration_compares_normalized_axis_ranges():
-    def values(main, incidental):
-        return {
-            "ABS_RX": SimpleNamespace(value=main, min=-100, max=100),
-            "ABS_RY": SimpleNamespace(value=incidental, min=-10000, max=10000),
-        }
-
-    calibration = calibrate_axis(
-        values(0, 0), values(-100, -6000), values(100, 6000), 0.25, 1.5
-    )
-    assert calibration.axis == "ABS_RX"
-
-
 def test_capture_retries_only_failed_endpoint_and_keeps_previous_samples():
     from car.system.management.joystick_setup import capture_axis
 
@@ -454,12 +396,10 @@ def test_preview_uses_pending_controls_without_mutating_settings(settings, runti
 def test_check_controls_uses_saved_settings_without_modifying_config(
     tmp_path, settings, monkeypatch
 ):
-    import select
-    import termios
-    import tty
     from contextlib import nullcontext
 
     from car.system.management import joystick as management
+    from car.system.ui import terminal as terminal_module
 
     path = tmp_path / "config.toml"
     path.write_text(Path("car/config.toml").read_text())
@@ -472,17 +412,23 @@ def test_check_controls_uses_saved_settings_without_modifying_config(
     restored = []
     terminal = SimpleNamespace()
     monkeypatch.setattr(
-        management,
+        terminal_module,
         "open",
         lambda path, mode="r", **kwargs: nullcontext(
             reader if mode == "r" else terminal
         ),
         raising=False,
     )
-    monkeypatch.setattr(select, "select", lambda *args: ([reader], [], []))
-    monkeypatch.setattr(termios, "tcgetattr", lambda fd: "old-terminal")
-    monkeypatch.setattr(termios, "tcsetattr", lambda *args: restored.append(args))
-    monkeypatch.setattr(tty, "setcbreak", lambda fd: None)
+    monkeypatch.setattr(
+        terminal_module.select, "select", lambda *args: ([reader], [], [])
+    )
+    monkeypatch.setattr(terminal_module.termios, "tcgetattr", lambda fd: "old-terminal")
+    monkeypatch.setattr(
+        terminal_module.termios, "tcsetattr", lambda *args: restored.append(args)
+    )
+    monkeypatch.setattr(terminal_module.tty, "setcbreak", lambda fd: None)
+    monkeypatch.setattr(terminal_module.os, "read", lambda *args: b"\x1b")
+    monkeypatch.setenv("TERM", "xterm")
 
     class Session:
         def __enter__(self):
@@ -517,5 +463,81 @@ def test_check_controls_uses_saved_settings_without_modifying_config(
     assert opened == [settings]
     assert shown[0]["speed_mode"] == settings.controls.speed_mode
     assert shown[1] == (0.5, -0.5)
-    assert closed and restored == [(42, termios.TCSADRAIN, "old-terminal")]
+    assert closed and restored == [
+        (42, terminal_module.termios.TCSADRAIN, "old-terminal")
+    ]
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("override", ["unavailable", "outside_range"])
+def test_pending_mapping_validation_preserves_live_session(settings, runtime, override):
+    device, backend, scan, _ = runtime
+    speed = settings.controls.speed.with_overrides(
+        **({"axis": "ABS_UNKNOWN"} if override == "unavailable" else {"minimum": -200})
+    )
+    pending = settings.controls.with_overrides(speed=speed)
+    with Joystick(settings, backend=backend, scan=scan) as joystick:
+        with pytest.raises(ValueError):
+            joystick.read(controls=pending)
+        assert not device.closed
+        assert joystick.read() == ControlInput(0, 0)
+
+
+def test_saved_mapping_detects_range_change_during_runtime(settings, runtime):
+    device, backend, scan, _ = runtime
+    with Joystick(settings, backend=backend, scan=scan) as joystick:
+        device.absinfo = lambda code: SimpleNamespace(value=0, min=-50, max=50)
+        with pytest.raises(ValueError, match="range changed"):
+            joystick.read()
+
+
+def test_invalid_dead_zone_retries_without_recapturing_sticks(tmp_path, settings):
+    path = tmp_path / "config.toml"
+    path.write_text(Path("car/config.toml").read_text())
+    metadata = tmp_path / "system/pyproject.toml"
+    metadata.parent.mkdir()
+    metadata.write_text(Path("car/system/pyproject.toml").read_text())
+    samples = iter(
+        [
+            snapshot(),
+            snapshot(0, -100),
+            snapshot(0, 100),
+            snapshot(),
+            snapshot(100, 0),
+            snapshot(-100, 0),
+            snapshot(),
+        ]
+    )
+    values = iter([1.0, -0.1, float("nan"), 0.08])
+    prompts, captures, previewed = [], [], []
+
+    class Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def axis_snapshot(self):
+            captures.append(True)
+            return next(samples)
+
+    def answer(question):
+        prompts.append(question)
+        return next(values)
+
+    configure_controls(
+        tmp_path,
+        ask=lambda *args: True,
+        select=lambda *args: 0,
+        number=answer,
+        factory=lambda *args, **kwargs: Session(),
+        preview=lambda client, controls, metadata: previewed.append(controls) or True,
+        save=lambda *args: True,
+    )
+    assert len(captures) == 7  # No samples were requested again after invalid settings.
+    assert len(prompts) == 4 and "Calibration is kept" in prompts[-1]
+    saved = load_config(path).joystick.controls
+    assert saved.dead_zone == 0.08
+    assert saved == previewed[0]
+    assert saved.speed.axis == "ABS_Y" and saved.steering.axis == "ABS_RX"

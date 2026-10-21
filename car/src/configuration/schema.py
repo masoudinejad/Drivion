@@ -63,6 +63,15 @@ class JoystickConfig(JoystickIdentity):
     controls: JoystickControlsConfig
 
 
+class JoystickSetupConfig(ConfigModel):
+    """Calibration UI metadata from tool.drivion.joystick_setup in project TOML."""
+
+    minimum_axis_excursion: float = Field(gt=0, le=0.5, allow_inf_nan=False)
+    axis_dominance_ratio: float = Field(gt=1, allow_inf_nan=False)
+    preview_refresh_seconds: float = Field(gt=0, le=1, allow_inf_nan=False)
+    preview_idle_hint_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+
 class CameraConfig(ConfigModel):
     """Requested camera capture and persistence settings."""
 

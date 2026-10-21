@@ -41,14 +41,17 @@ I/O failures still abort; the configuration remains unchanged.
 
 Choose the two response modes independently, enable or disable reverse, and enter
 one neutral dead zone as a fraction (for example `0.05` means 5% of each side's
-travel). A live preview then shows speed and steering as signed bars and numeric
-values using these pending settings. Move each stick to check the result; Enter
+travel). Invalid dead-zone values repeat only that setting; calibration and
+response choices are kept. A live preview then uses the pending settings:
+accurate controls show gauges and decimal values, fixed controls show direction
+states, and forward-only speed uses a one-sided gauge. Move each stick to check
+the result; Enter
 continues only after both controls have changed. Escape cancels without saving.
 A lack of recent control changes shows a wake-up/connection hint. The preview
 reads input only and sends no drive commands. Review the choices before accepting
-the final save prompt. Back, Ignore,
-or leaving the save prompt leaves the configuration untouched. Configuration updates
-are atomic. Setup does not send commands to the Arduino or move the car.
+the final save prompt. Back, Ignore, or leaving the save prompt leaves the
+configuration untouched. Configuration updates are atomic. Setup does not send
+commands to the Arduino or move the car.
 
 `[joystick.controls]` contains only interpretation settings:
 
@@ -73,8 +76,8 @@ speed. Physical speed and steering-angle limits belong to that layer.
 Setup's excursion, dominance, preview refresh, and inactivity thresholds live in
 `system/pyproject.toml`, under `tool.drivion.joystick_setup`. The dominance ratio
 is `1.5`: at the first endpoint, the intended axis must move at least 1.5 times
-as far as other eligible axes after normalizing their driver ranges. Only the selected
-axis contributes to the resulting control signal.
+as far as other eligible axes after normalizing their driver ranges. Only the
+selected axis contributes to the resulting control signal.
 
 ## Check saved controls
 
@@ -107,10 +110,32 @@ axes are sampled during runtime, sequentially rather than as an atomic event
 frame. Poll from the application at the required control rate; there is no input
 thread, exclusive device grab, automatic reconnection, or actuator integration.
 
-A read failure closes the device and raises; later reads fail as well. Callers
+An I/O failure closes the device and raises; later reads fail as well. Callers
 must stop applying previous input on failure and handle reopening explicitly.
+`read(controls=pending_controls)` previews validated pending settings without
+modifying the saved settings. Missing axes or incompatible calibration ranges
+raise `ValueError` before producing any demand and leave the device open so the
+mapping can be corrected. The same checks apply to saved settings; each read
+reuses the metadata from its two axis queries without extra device reads.
 Use the context manager or `close()` to release the device. Calls must be
 serialized. Confirm the mappings and response on the Pi before using them in
 the driving loop.
+
+## Code organization
+
+- `discovery.py`: controller enumeration, specifications, and shared identity
+  extraction and matching.
+- `calibration.py`: pure dominant-axis identification and endpoint calculations;
+  no device or terminal access.
+- `joystick.py`: device lifetime, metadata validation, current axis snapshots,
+  and control interpretation.
+- `system/management/joystick_setup.py`: capture/retry prompts and atomic saving.
+- `system/management/joystick_preview.py`: pre-save verification using pending
+  settings; saved checks are dispatched by `system/management/joystick.py`.
+- `system/ui/terminal.py`: shared single-key input and terminal restoration.
+- `system/ui/drive_monitor.py`: general display of demands from any source.
+
+`JoystickSetupConfig` validates calibration/preview metadata from
+`system/pyproject.toml`; all runtime joystick settings remain in `car/config.toml`.
 
 Reference: [python-evdev API](https://python-evdev.readthedocs.io/en/latest/apidoc.html).

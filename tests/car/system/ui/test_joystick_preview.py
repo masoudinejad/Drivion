@@ -62,6 +62,7 @@ def test_preview_cancel_and_closed_input(key, error):
 
 def test_preview_restores_terminal_on_read_failure(monkeypatch):
     from car.system.management import joystick_preview as module
+    from car.system.ui import terminal as terminal_module
 
     reader = SimpleNamespace(fileno=lambda: 42)
     terminal = io.StringIO()
@@ -69,18 +70,18 @@ def test_preview_restores_terminal_on_read_failure(monkeypatch):
     restored = []
     saved = object()
     monkeypatch.setattr(
-        module,
+        terminal_module,
         "open",
         lambda path, mode="r", **kwargs: nullcontext(
             reader if mode == "r" else terminal
         ),
         raising=False,
     )
-    monkeypatch.setattr(module.termios, "tcgetattr", lambda fd: saved)
+    monkeypatch.setattr(terminal_module.termios, "tcgetattr", lambda fd: saved)
     monkeypatch.setattr(
-        module.termios, "tcsetattr", lambda *args: restored.append(args)
+        terminal_module.termios, "tcsetattr", lambda *args: restored.append(args)
     )
-    monkeypatch.setattr(module.tty, "setcbreak", lambda fd: None)
+    monkeypatch.setattr(terminal_module.tty, "setcbreak", lambda fd: None)
     monkeypatch.setenv("TERM", "xterm")
 
     def fail(**kwargs):
@@ -93,11 +94,13 @@ def test_preview_restores_terminal_on_read_failure(monkeypatch):
                 allow_reverse=True, speed_mode="accurate", steering_mode="accurate"
             ),
             {
+                "minimum_axis_excursion": 0.25,
+                "axis_dominance_ratio": 1.5,
                 "preview_refresh_seconds": 0.05,
                 "preview_idle_hint_seconds": 5,
             },
         )
-    assert restored == [(42, module.termios.TCSADRAIN, saved)]
+    assert restored == [(42, terminal_module.termios.TCSADRAIN, saved)]
     assert "\033[?25h" in terminal.getvalue()
 
 

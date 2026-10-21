@@ -1,15 +1,18 @@
 """Absolute stick snapshots and normalized controls for a selected controller."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Literal
 
 from car.src.configuration.schema import (
+    JoystickAxisConfig,
     JoystickConfig,
     JoystickControlsConfig,
-    JoystickIdentity,
 )
 from car.system.ui.progress import show_progress, show_success
 
-from .discovery import discover, matches_identity, resolve_controller
+from .calibration import AxisSample
+from .discovery import device_identity, discover, matches_identity, resolve_controller
 
 
 @dataclass(frozen=True)
@@ -20,7 +23,12 @@ class ControlInput:
     steering: float
 
 
-def interpret_axis(raw, calibration, dead_zone, mode):
+def interpret_axis(
+    raw: int,
+    calibration: JoystickAxisConfig,
+    dead_zone: float,
+    mode: Literal["fixed", "accurate"],
+) -> float:
     """Normalize each side independently, remove dead zone, then apply mode."""
     delta = raw - calibration.centre
     travel = (
@@ -78,13 +86,7 @@ class Joystick:
                 ) from error
             try:
                 self._device = backend.InputDevice(observed.path, readonly=True)
-                info = self._device.info
-                opened_identity = JoystickIdentity(
-                    name=self._device.name,
-                    vendor=info.vendor,
-                    product=info.product,
-                    unique_id=self._device.uniq or "",
-                )
+                opened_identity = device_identity(self._device)
                 if not matches_identity(opened_identity, config):
                     raise RuntimeError(
                         "Joystick changed while opening. Identify it again."
@@ -95,46 +97,56 @@ class Joystick:
                     for code, _ in capabilities.get(backend.ecodes.EV_ABS, [])
                 }
                 if not for_setup:
-                    for calibration in (
-                        config.controls.speed,
-                        config.controls.steering,
-                    ):
-                        if calibration.axis not in self._axes:
-                            raise ValueError(
-                                f"Joystick axis {calibration.axis} is unavailable."
-                            )
-                        axis = self._device.absinfo(self._axes[calibration.axis])
-                        if axis is None or not (
-                            axis.min
-                            <= calibration.minimum
-                            < calibration.centre
-                            < calibration.maximum
-                            <= axis.max
-                        ):
-                            raise ValueError(
-                                "Joystick axis range changed. Configure controls again."
-                            )
+                    self._control_snapshot(config.controls)
             except BaseException:
                 self.close()
                 raise
         name = "".join(char if char.isprintable() else " " for char in config.name)
         show_success(f"Joystick initialized: {name}")
 
-    def axis_snapshot(self, names=None):
-        """Return current AbsInfo by axis name; invalidate the device on I/O failure."""
+    def axis_snapshot(
+        self, names: Iterable[str] | None = None
+    ) -> dict[str, AxisSample]:
+        """Return current axis metadata; unknown names raise ValueError.
+
+        I/O failures invalidate the device. Invalid requests leave it open.
+        """
         if self._device is None:
             raise RuntimeError("Joystick is closed or disconnected.")
+        names = tuple(self._axes) if names is None else tuple(names)
+        for name in names:
+            if name not in self._axes:
+                raise ValueError(f"Joystick axis {name} is unavailable.")
         try:
-            snapshot = {
-                name: self._device.absinfo(self._axes[name])
-                for name in (self._axes if names is None else names)
-            }
+            snapshot = {name: self._device.absinfo(self._axes[name]) for name in names}
             if any(axis is None for axis in snapshot.values()):
                 raise OSError("Joystick axis state is unavailable.")
             return snapshot
         except OSError:
             self.close()
             raise
+
+    def _control_snapshot(
+        self, controls: JoystickControlsConfig
+    ) -> dict[str, AxisSample]:
+        """Validate saved and pending mappings against the same sampled metadata."""
+        if controls.speed is None or controls.steering is None:
+            raise ValueError("Joystick controls have not been calibrated.")
+        calibrations = (controls.speed, controls.steering)
+        axes = self.axis_snapshot(calibration.axis for calibration in calibrations)
+        for calibration in calibrations:
+            axis = axes[calibration.axis]
+            if (
+                not axis.min
+                <= calibration.minimum
+                < calibration.centre
+                < calibration.maximum
+                <= axis.max
+            ):
+                raise ValueError(
+                    "Joystick axis range changed. Configure controls again."
+                )
+        return axes
 
     def read(self, *, controls: JoystickControlsConfig | None = None) -> ControlInput:
         """Return current normalized speed and steering, or raise on device failure.
@@ -144,9 +156,7 @@ class Joystick:
         A read error returns no demand; the caller must stop applying prior input.
         """
         controls = self.config.controls if controls is None else controls
-        if controls.speed is None or controls.steering is None:
-            raise ValueError("Joystick controls have not been calibrated.")
-        axes = self.axis_snapshot((controls.speed.axis, controls.steering.axis))
+        axes = self._control_snapshot(controls)
         speed = interpret_axis(
             axes[controls.speed.axis].value,
             controls.speed,

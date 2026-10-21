@@ -19,6 +19,16 @@ class Controller:
         return self.identity.name
 
 
+def device_identity(device) -> JoystickIdentity:
+    """Read the same identity fields during discovery and the opening recheck."""
+    return JoystickIdentity(
+        name=device.name,
+        vendor=device.info.vendor,
+        product=device.info.product,
+        unique_id=device.uniq or "",
+    )
+
+
 def discover(*, backend=None, input_directory=Path("/dev/input")):
     """Return controllers and per-device errors, closing every opened device.
 
@@ -48,12 +58,7 @@ def discover(*, backend=None, input_directory=Path("/dev/input")):
             ):
                 continue
             info = device.info
-            identity = JoystickIdentity(
-                name=device.name,
-                vendor=info.vendor,
-                product=info.product,
-                unique_id=device.uniq or "",
-            )
+            identity = device_identity(device)
             lines = [
                 f"Name: {device.name}",
                 f"Device: {path}",
