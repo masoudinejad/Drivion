@@ -126,7 +126,7 @@ public:
   }
 
   // Invoke frequently from loop(); callbacks must be short and must not
-  // reenter.
+  // call other methods except publish(), which may update reports immediately.
   void poll(uint32_t now) {
     if (!enabled_)
       return;

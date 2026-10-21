@@ -106,12 +106,16 @@ The serial port provides `available`, `read`, `availableForWrite`, and
 
 Supply reports through `publish(ReportedValues)` with an acquisition timestamp,
 values, and validity mask. Callback events are `Target`, `StopRequested`,
-`CommandTimeout`, and `SessionChanged`. Callbacks must be short and not reenter
-the library. The application performs its control work separately.
+`CommandTimeout`, and `SessionChanged`. Callbacks must be short. They may call
+`publish()` to update reports before further messages are handled in the same
+poll; they must not call other library methods. The application performs its
+control work separately.
 
 The `communication_demo` sketch echoes accepted targets as reports, with no
-motors or sensors. It invalidates reports on timeout/stop/session change. It also
-answers the existing INFO identity query before the first binary delimiter.
+motors or sensors. It publishes reports directly from callbacks, invalidating
+them immediately on timeout/stop/session change, including snapshots answered
+in the same poll. It also answers the existing INFO identity query before the
+first binary delimiter.
 After that transition it accepts binary messages only until reset, preventing
 binary payloads from accidentally dispatching text commands. Management tools
 that reopen/reset the classic Nano can query INFO again.
@@ -210,10 +214,10 @@ boundary allows future alternatives, which must define their own framing rules.
 
 Tests cover framing/FCS, malformed and partial frames, sign conventions, session
 and sequence handling, deadlines, rollover, reporting modes, and client failures.
-A native C++ harness runs the real Arduino header with Python-generated frames.
-Regression cases cover pending and partial responses during synchronization and
-bounded event overflow. Periodic scheduling tests cover fairness when only one
-frame can be sent per poll.
+Native C++ harnesses run the real Arduino header and demo sketch with
+Python-generated frames. Regression cases cover pending and partial responses
+during synchronization, bounded event overflow, periodic scheduling fairness,
+and snapshots requested at a command deadline.
 An optional Arduino CLI test compiles the complete demo for the Nano without
 uploading. Hardware validation still needs USB reset/reconnect, actual clock
 drift, serial throughput, and integration with the application's stop policy.

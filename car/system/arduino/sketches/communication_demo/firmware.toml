@@ -1,6 +1,6 @@
 # Requirements owned by this sketch; parameter values live in car/config.toml.
 [firmware]
-version = "1.0.0"
+version = "1.0.1"
 protocol_version = 1
 fqbn = "arduino:avr:nano:cpu=atmega328"
 

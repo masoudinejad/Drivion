@@ -308,3 +308,90 @@ def test_periodic_reports_share_bandwidth_with_status(firmware):
     assert periodic == [wire.MessageType.STATUS, wire.MessageType.TELEMETRY] * 5 + [
         wire.MessageType.STATUS
     ]
+
+
+@pytest.fixture(scope="module")
+def demo_firmware(tmp_path_factory):
+    """Run the actual demo loop and callback, including their publication order."""
+    folder = tmp_path_factory.mktemp("communication-demo-native")
+    shutil.copy(
+        CAR / "system/arduino/sketches/communication_demo/communication_demo.ino",
+        folder,
+    )
+    stage_library(folder, CAR, tool_settings(CAR, "compile"))
+    (folder / "drivion_generated.h").write_text(
+        render_header(
+            "communication_demo",
+            load_firmware("communication_demo", CAR),
+            {},
+            tool_settings(CAR, "flash"),
+        )
+    )
+    (folder / "Arduino.h").write_text(r"""
+#pragma once
+#include <stddef.h>
+#include <stdint.h>
+#include <deque>
+#include <string>
+#define F(value) value
+struct Port {
+  std::deque<uint8_t> rx;
+  std::string tx;
+  void begin(unsigned long) {}
+  int available() { return int(rx.size()); }
+  int peek() { return rx.empty() ? -1 : rx.front(); }
+  int read() { if (rx.empty()) return -1; int byte=rx.front(); rx.pop_front(); return byte; }
+  int availableForWrite() { return 1; }
+  size_t write(uint8_t byte) { tx.push_back(char(byte)); return 1; }
+  void println(const char *value) { tx += std::string(value) + "\n"; }
+};
+extern Port Serial;
+uint32_t millis();
+""")
+    source = folder / "runner.cpp"
+    source.write_text(r"""
+#include "Arduino.h"
+#include <iostream>
+#include <sstream>
+#include <iomanip>
+Port Serial;
+uint32_t now = 0;
+uint32_t millis() { return now; }
+#include "communication_demo.ino"
+int main() {
+  setup();
+  std::string line;
+  while (std::getline(std::cin, line)) {
+    std::istringstream in(line);
+    std::string hex;
+    in >> now >> hex;
+    if (hex != "-")
+      for (size_t i=0; i<hex.size(); i+=2)
+        Serial.rx.push_back(uint8_t(std::stoul(hex.substr(i,2), nullptr, 16)));
+    for (int i=0; i<100; ++i) loop();
+    std::cout << "W ";
+    for (unsigned char byte : Serial.tx)
+      std::cout << std::hex << std::setfill('0') << std::setw(2) << unsigned(byte);
+    std::cout << std::dec << "\n";
+    Serial.tx.clear();
+  }
+}
+""")
+    return compile_native(source)
+
+
+def test_demo_timeout_invalidates_same_poll_snapshot(demo_firmware):
+    _, frames = run(
+        demo_firmware,
+        [
+            packet(0, wire.MessageType.HELLO, 0),
+            packet(
+                1, wire.MessageType.DRIVE_TARGET, 1, wire.TARGET.pack(100, 200, 150)
+            ),
+            packet(2, wire.MessageType.GET_TELEMETRY, 2),
+            packet(150, wire.MessageType.GET_TELEMETRY, 3),
+        ],
+    )
+    snapshots = [frame for frame in frames if frame.kind == wire.MessageType.SNAPSHOT]
+    assert wire.TELEMETRY.unpack(snapshots[0].payload) == (1, 100, 200, 3)
+    assert wire.TELEMETRY.unpack(snapshots[1].payload)[-1] == 0

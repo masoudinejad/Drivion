@@ -11,18 +11,19 @@ constexpr Settings settings{COMMAND_TIMEOUT_MS, FRAME_TIMEOUT_MS,
                             STATUS_INTERVAL_MS, MAX_TELEMETRY_INTERVAL_MS,
                             RX_BUDGET_BYTES,    TX_BUDGET_BYTES};
 static_assert(settings.valid(), "Invalid generated communication parameters");
-ReportedValues reported{};
+void onEvent(void *, Event event, const Target &target);
+Communication<decltype(Serial)> communication(Serial, settings, onEvent,
+                                              nullptr);
 void onEvent(void *, Event event, const Target &target) {
-  // Real firmware chooses its own control and stop policy in this callback.
+  // Publish within the callback so replies in this poll see the updated state.
+  // Real firmware chooses its own control and stop policy here.
+  ReportedValues reported{};
   if (event == Event::Target) {
     reported = ReportedValues{millis(), target.speedMmS,
                               target.steeringCentidegrees, AllFields};
-  } else {
-    reported.validFields = 0;
   }
+  communication.publish(reported);
 }
-Communication<decltype(Serial)> communication(Serial, settings, onEvent,
-                                              nullptr);
 // Preserve existing INFO management queries before entering a binary session.
 char command[sizeof(DRIVION_INFO_COMMAND)]{};
 size_t commandLength = 0;
@@ -64,8 +65,6 @@ void setup() {
 void loop() {
   if (!binaryMode)
     pollManagement();
-  if (binaryMode) {
-    communication.publish(reported);
+  if (binaryMode)
     communication.poll(millis());
-  }
 }
