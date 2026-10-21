@@ -278,3 +278,15 @@ def test_root_services_use_protected_toml_snapshot():
     ):
         content = (templates / name).read_text()
         assert "--config-root {{ service_configuration_directory }}" in content
+
+
+def test_wifi_recovery_does_not_require_information_collection_success():
+    import configparser
+
+    unit = configparser.ConfigParser(interpolation=None)
+    unit.read(
+        run.ROOT / "dev/ansible/templates/network/drivion-wifi-fallback.service.j2"
+    )
+    assert "drivion-system-info.service" not in unit["Unit"].get("Requires", "").split()
+    assert "drivion-system-info.service" in unit["Unit"]["After"].split()
+    assert "drivion-system-info.service" in unit["Unit"]["Wants"].split()

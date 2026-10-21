@@ -9,6 +9,11 @@ from system.ui.startup import show_startup
 
 
 def main():
+    # Dependencies are available only after enter_environment has re-executed us.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from car.src.config import load_config
+
+    load_config(Path(__file__).resolve().parent / "config.toml")
     show_startup()
 
 

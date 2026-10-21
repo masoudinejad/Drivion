@@ -142,3 +142,22 @@ def test_fallback_only_activates_without_an_active_wifi_connection():
             "wlan0",
         ]
     assert run.call_args.kwargs["timeout"] == 30
+
+
+@pytest.mark.parametrize(
+    "content", [b"\xff", b"[broken", b"software = 7\narduino = false\n"]
+)
+def test_corrupt_generated_info_is_rebuilt(tmp_path, content, caplog):
+    config(tmp_path)
+    tree = tmp_path / "device-tree"
+    device_tree(tree)
+    path = tmp_path / "system/info.toml"
+    path.parent.mkdir()
+    path.write_bytes(content)
+    sections = system_info.collect_info(tmp_path, device_tree=tree)
+    system_info.publish(path, sections)
+    rebuilt = tomllib.loads(path.read_text())
+    assert rebuilt["software"] == {}
+    assert rebuilt["hardware"]["serial_number"] == "00000000a4f29c"
+    if content in (b"[broken", b"\xff"):
+        assert "Ignoring invalid system information" in caplog.text

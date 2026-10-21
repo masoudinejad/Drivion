@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 import os
 import platform
 import socket
@@ -111,11 +112,23 @@ def software_from_text(content):
     return software
 
 
-def existing_software(info_file):
+def existing_info(info_file):
+    """Treat generated observations as a cache; recover from corrupt records."""
     try:
-        return software_from_text(Path(info_file).read_text())
+        return tomllib.loads(Path(info_file).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
+    except (ValueError, UnicodeError) as error:
+        logging.getLogger(__name__).warning(
+            "Ignoring invalid system information: %s", error
+        )
+        return {}
+
+
+def existing_software(info_file):
+    """Return usable historical deployment metadata, if any."""
+    software = existing_info(info_file).get("software", {})
+    return software if isinstance(software, dict) else {}
 
 
 def collect_info(
@@ -129,11 +142,12 @@ def collect_info(
     settings = network_settings(config_root)
     hardware = hardware_info(device_tree)
     info_file = car_root / INFO_PATH
-    previous = tomllib.loads(info_file.read_text()) if info_file.exists() else {}
+    previous = existing_info(info_file)
+    for section in ("software", "arduino"):
+        if not isinstance(previous.get(section, {}), dict):
+            previous.pop(section)
     return {
-        "software": (
-            existing_software(car_root / INFO_PATH) if software is None else software
-        ),
+        "software": (previous.get("software", {}) if software is None else software),
         "hardware": hardware,
         "arduino": retain_firmware_info(
             compact_report(discover(car_root, config_root)), previous.get("arduino", {})
@@ -161,7 +175,7 @@ def publish(info_file, sections):
     try:
         if info_file.read_text() == content:
             return content
-    except FileNotFoundError:
+    except (FileNotFoundError, UnicodeError):
         pass
     info_file.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(

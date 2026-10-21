@@ -140,6 +140,10 @@ def run_check(root, name, *, stream=None):
     root = Path(root)
     with (root / "config.toml").open("rb") as source:
         values = tomllib.load(source)
+    if "hardware_tests" not in values:
+        raise ValueError(
+            "Configure [hardware_tests] in car/config.toml before running diagnostics"
+        )
     settings = HardwareTestsConfig.model_validate(values["hardware_tests"])
     directory = root / settings.log_directory
     directory.mkdir(parents=True, exist_ok=True)

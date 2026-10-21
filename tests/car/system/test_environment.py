@@ -102,3 +102,30 @@ def test_manage_executable_enters_environment_from_another_directory(tmp_path):
         [str(launcher)], cwd=tmp_path, text=True, capture_output=True, check=True
     )
     assert result.stdout.strip() == str(target)
+
+
+def test_startup_rejects_invalid_application_config_before_success(monkeypatch):
+    import importlib.util
+    from unittest.mock import Mock
+
+    source = Path(__file__).resolve().parents[3] / "car"
+    monkeypatch.syspath_prepend(str(source))
+    spec = importlib.util.spec_from_file_location(
+        "drivion_launcher", source / "drive.py"
+    )
+    launcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launcher)
+    banner = Mock()
+    monkeypatch.setattr(launcher, "show_startup", banner)
+    from car.src import config
+
+    monkeypatch.setattr(
+        config, "load_config", Mock(side_effect=ValueError("invalid camera"))
+    )
+    with pytest.raises(ValueError, match="invalid camera"):
+        launcher.main()
+    banner.assert_not_called()
+    config.load_config.assert_called_once_with(source / "config.toml")
+    config.load_config.side_effect = None
+    launcher.main()
+    banner.assert_called_once()

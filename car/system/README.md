@@ -138,3 +138,16 @@ polling; they are not one-way delays. Initial connection time includes the board
 boot wait and is reported separately. Missing replies fail after the configured
 response timeout (subject to an in-progress serial read). Camera capture uses the
 camera driver's blocking call; an unresponsive driver may require interruption.
+
+Generated information is a recoverable cache: malformed `system/info.toml`
+records are reported and rebuilt without reusing invalid metadata. Wi-Fi fallback
+is ordered after information refresh but does not require refresh to succeed,
+so recovery access remains available when information collection fails.
+Hardware diagnostics require the optional `[hardware_tests]` section; if absent,
+management displays a configuration message and returns to its menu.
+
+Use hardware diagnostics on the Pi to measure camera throughput and Arduino
+round-trip latency before changing performance budgets. Desktop tests cannot
+establish physical-device timing, memory use, or camera compatibility. Keep the
+current ML dependency contract until representative model workloads identify
+which frameworks can be removed or made optional.

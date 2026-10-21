@@ -126,3 +126,24 @@ def test_hardware_menu_registered():
     from car.system.management.application import default_items
 
     assert "Hardware tests" in [item.label for item in default_items()]
+
+
+def test_missing_optional_diagnostics_settings_returns_to_management(root):
+    from car.src.config import load_config
+    from car.system.management.application import MenuItem, run_management
+
+    path = root / "config.toml"
+    path.write_text(path.read_text().split("[hardware_tests]")[0])
+    assert load_config(path).hardware_tests is None
+    pages = []
+    choices = iter([0, None])
+    with patch("car.src.camera.camera.Camera") as camera:
+        run_management(
+            root,
+            items=[MenuItem("Hardware tests", lambda root: run_check(root, "camera"))],
+            select=lambda *args: next(choices),
+            display=lambda *args: pages.append(args),
+        )
+        camera.assert_not_called()
+    assert pages[0][0] == "Hardware tests unavailable"
+    assert "Configure [hardware_tests]" in pages[0][1]
