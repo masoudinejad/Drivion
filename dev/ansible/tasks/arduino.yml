@@ -225,3 +225,17 @@
     fail_msg: >-
       Arduino AVR Boards {{ arduino_avr_core_version }} was not installed.
   when: not ansible_check_mode
+
+- name: Install the configured Arduino servo library
+  become: false
+  when: not ansible_check_mode
+  ansible.builtin.command:
+    argv:
+      - "{{ arduino_cli_executable_path }}"
+      - --config-file
+      - "{{ arduino_config_path }}"
+      - lib
+      - install
+      - "{{ arduino_servo_library }}@{{ arduino_servo_library_version }}"
+  register: arduino_servo_install
+  changed_when: "'Already installed' not in arduino_servo_install.stdout"

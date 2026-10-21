@@ -113,6 +113,8 @@ def build_inventory(settings):
                             "arduino_avr_core_version": (
                                 arduino_toolchain.avr_core_version
                             ),
+                            "arduino_servo_library": arduino_toolchain.servo_library,
+                            "arduino_servo_library_version": arduino_toolchain.servo_library_version,
                             "controller_root": str(ROOT),
                             "controller_python": sys.executable,
                             "wifi_command_path": network.command_path,

@@ -40,6 +40,8 @@ class ArduinoToolchainSettings:
     serial_group: str
     avr_core: str
     avr_core_version: str
+    servo_library: str
+    servo_library_version: str
     discovery_timeout_seconds: int
     command_timeout_seconds: int
 
@@ -203,7 +205,7 @@ def arduino_toolchain_settings(car_root, *, values=None):
         _tool_table(car_root, "arduino") if values is None else values,
         "tool.drivion.arduino",
     )
-    for name in ("cli_version", "avr_core_version"):
+    for name in ("cli_version", "avr_core_version", "servo_library_version"):
         value = getattr(settings, name)
         if not isinstance(value, str) or not re.fullmatch(r"\d+\.\d+\.\d+", value):
             raise ValueError(f"Configure a valid tool.drivion.arduino.{name}")
@@ -237,6 +239,10 @@ def arduino_toolchain_settings(car_root, *, values=None):
         r"[a-z0-9_-]+:[a-z0-9_-]+", settings.avr_core
     ):
         raise ValueError("Configure a valid Arduino core identifier")
+    if not isinstance(settings.servo_library, str) or not re.fullmatch(
+        r"[A-Za-z][A-Za-z0-9_-]*", settings.servo_library
+    ):
+        raise ValueError("Configure a valid Arduino servo library identifier")
     paths = {
         name: safe_relative_path(
             getattr(settings, name), f"tool.drivion.arduino.{name}"
