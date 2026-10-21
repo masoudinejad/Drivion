@@ -271,7 +271,7 @@ class AppConfig(ConfigModel):
 
     @model_validator(mode="after")
     def valid_firmware_configuration(self):
-        from car.system.arduino.firmware.definitions import validate_parameter_values
+        from .firmware import validate_parameter_values
 
         try:
             validate_parameter_values(self.firmware)

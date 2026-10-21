@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from car.src.configuration.schema import CommunicationConfig
-from car.system.ui.progress import show_progress
+from car.src.feedback import show_progress
 
 from . import protocol as wire
 from .transport import ByteTransport, open_serial
@@ -81,9 +81,9 @@ class Communication:
         self.closed = False
 
     @classmethod
-    def open(cls, address: str, config: CommunicationConfig):
+    def open(cls, address: str, config: CommunicationConfig, *, progress=None):
         """Open USB serial, accommodate reset, and negotiate before returning."""
-        with show_progress("Initializing Arduino communication"):
+        with (progress or show_progress)("Initializing Arduino communication"):
             client = cls(open_serial(address, config), config)
             try:
                 time.sleep(config.boot_wait_seconds)
@@ -93,9 +93,9 @@ class Communication:
                 client.close()
                 raise
 
-    def connect(self):
+    def connect(self, *, progress=None):
         """Negotiate a fresh session, invalidating previously accepted commands."""
-        with show_progress("Connecting Arduino communication"):
+        with (progress or show_progress)("Connecting Arduino communication"):
             return self._handshake(new_session=True)
 
     def synchronize(self):

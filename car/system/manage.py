@@ -10,14 +10,15 @@ sys.path.insert(0, str(CAR_ROOT.parent))
 sys.path.insert(0, str(CAR_ROOT))
 
 from system.environment import enter_environment
-from system.management.application import run_management
-from system.ui.screen import terminal_screen
 
 
 def main():
     """Enter the configured environment and open the central management menu."""
     try:
         enter_environment(CAR_ROOT, __file__)
+        from system.management.application import run_management
+        from system.ui.screen import terminal_screen
+
         with terminal_screen():
             run_management(CAR_ROOT)
     except KeyboardInterrupt:

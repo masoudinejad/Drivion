@@ -1,10 +1,12 @@
 """Guided stick calibration and control interpretation settings."""
 
+from functools import partial
 from pathlib import Path
 
 import tomllib
 
 from ..ui.navigation import prompt_number, select_item
+from ..ui.progress import show_progress, show_success
 from .joystick_preview import preview_controls
 
 
@@ -91,7 +93,11 @@ def configure_controls(
         )
     excursion = settings.minimum_axis_excursion
     dominance = settings.axis_dominance_ratio
-    factory = Joystick if factory is None else factory
+    factory = (
+        partial(Joystick, progress=show_progress, success=show_success)
+        if factory is None
+        else factory
+    )
     with factory(config, for_setup=True) as joystick:
         if not ask(
             "Joystick initialized. Wake the controller if idle, check its connection, "

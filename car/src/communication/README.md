@@ -225,3 +225,7 @@ and snapshots requested at a command deadline.
 An optional Arduino CLI test compiles the complete demo for the Nano without
 uploading. Hardware validation still needs USB reset/reconnect, actual clock
 drift, serial throughput, and integration with the application's stop policy.
+
+Connection feedback uses application logging by default. Terminal applications
+can pass `progress=show_progress` to `Communication.open` or `connect` to provide
+a context-manager callback from their own presentation layer.

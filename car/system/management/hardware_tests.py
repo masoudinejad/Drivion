@@ -10,6 +10,7 @@ from uuid import uuid4
 import tomllib
 
 from ..ui.navigation import select_item, show_page
+from ..ui.progress import show_progress
 
 
 def latency_summary(label, samples, log):
@@ -73,7 +74,9 @@ def check_arduino(root, config, settings, log):
     from car.src.communication import Communication, ReportedValues
 
     started = time.monotonic()
-    with Communication.open(config["address"], config["communication"]) as client:
+    with Communication.open(
+        config["address"], config["communication"], progress=show_progress
+    ) as client:
         log.info(
             "Connection latency (includes board boot wait): %.3f ms",
             (time.monotonic() - started) * 1000,

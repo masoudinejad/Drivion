@@ -9,7 +9,7 @@ from car.src.configuration.schema import (
     JoystickConfig,
     JoystickControlsConfig,
 )
-from car.system.ui.progress import show_progress, show_success
+from car.src.feedback import show_progress, show_success
 
 from .calibration import AxisSample
 from .discovery import device_identity, discover, matches_identity, resolve_controller
@@ -57,12 +57,19 @@ class Joystick:
     """
 
     def __init__(
-        self, config: JoystickConfig, *, for_setup=False, backend=None, scan=None
+        self,
+        config: JoystickConfig,
+        *,
+        for_setup=False,
+        backend=None,
+        scan=None,
+        progress=None,
+        success=None,
     ):
         self.config = config
         self._device = None
         self._axes = {}
-        with show_progress("Initializing joystick"):
+        with (progress or show_progress)("Initializing joystick"):
             if not for_setup and (
                 config.controls.speed is None or config.controls.steering is None
             ):
@@ -102,7 +109,7 @@ class Joystick:
                 self.close()
                 raise
         name = "".join(char if char.isprintable() else " " for char in config.name)
-        show_success(f"Joystick initialized: {name}")
+        (success or show_success)(f"Joystick initialized: {name}")
 
     def axis_snapshot(
         self, names: Iterable[str] | None = None

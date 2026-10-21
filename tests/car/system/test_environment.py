@@ -79,6 +79,11 @@ def test_manage_executable_enters_environment_from_another_directory(tmp_path):
     configure(root)
     source = Path(__file__).resolve().parents[3] / "car/system"
     shutil.copytree(
+        source.parent / "src",
+        root / "src",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    shutil.copytree(
         source,
         root / "system",
         ignore=shutil.ignore_patterns("env", "__pycache__", "uv.lock"),

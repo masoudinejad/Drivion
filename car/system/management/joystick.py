@@ -1,8 +1,10 @@
 """Discover, inspect and persist a joystick through the shared terminal UI."""
 
+from functools import partial
 from pathlib import Path
 
 from ..ui.navigation import select_item, show_page
+from ..ui.progress import show_progress, show_success
 
 
 def _printable(value):
@@ -82,7 +84,11 @@ def check_controls(car_root, *, factory=None, monitor_factory=None):
     from car.system.ui.terminal import terminal_input
 
     settings = load_config(Path(car_root) / "config.toml").joystick
-    factory = Joystick if factory is None else factory
+    factory = (
+        partial(Joystick, progress=show_progress, success=show_success)
+        if factory is None
+        else factory
+    )
     monitor_factory = DriveMonitor if monitor_factory is None else monitor_factory
     with (
         factory(settings) as joystick,

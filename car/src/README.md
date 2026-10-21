@@ -145,3 +145,9 @@ Choose **Joystick** in system management to identify a controller and configure
 its sticks, response modes, dead zone, and reverse driving.
 `Joystick(config.joystick)` returns normalized speed and steering via `read()`.
 See [joystick/README.md](joystick/README.md) for calibration and runtime usage.
+
+Firmware scalar validation lives in `configuration/firmware.py` and is shared
+with firmware tooling. Application configuration and hardware components can be
+imported without the management package or terminal UI. The driving entry point
+validates the full configuration after entering its Python environment and before
+showing successful startup status.

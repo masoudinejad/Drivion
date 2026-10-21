@@ -139,3 +139,9 @@ the driving loop.
 `system/pyproject.toml`; all runtime joystick settings remain in `car/config.toml`.
 
 Reference: [python-evdev API](https://python-evdev.readthedocs.io/en/latest/apidoc.html).
+
+Component feedback uses application logging by default. Terminal management
+injects `progress` and `success` callbacks to retain its spinner and completion
+message; importing or using the joystick does not import terminal UI modules.
+Normal development sync preserves saved calibration in the Pi configuration;
+`--replace-config` explicitly replaces it with workstation settings.

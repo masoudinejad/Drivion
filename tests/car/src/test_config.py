@@ -206,3 +206,36 @@ def test_jpeg_override_preserves_channel_selection(channels):
     assert changed.file_format == "jpeg"
     assert changed.channels == channels
     assert original.file_format == "numpy"
+
+
+def test_application_components_work_without_system_package(tmp_path):
+    """Headless modules and configuration must not depend on management or UI."""
+    import os
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[3] / "car"
+    (tmp_path / "car").mkdir()
+    shutil.copytree(
+        source / "src",
+        tmp_path / "car/src",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    shutil.copy(source / "config.toml", tmp_path / "car/config.toml")
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from car.src.config import load_config; from car.src.communication import Communication; from car.src.joystick import Joystick; load_config()",
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
