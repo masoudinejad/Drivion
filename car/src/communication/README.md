@@ -36,7 +36,11 @@ implicit reconnections. All operations must have one owner and be serialized.
 drain the serial link. Its read can wait up to `read_timeout_seconds`.
 
 The client owns its transport. `open` selects the configured port, waits for
-possible USB reset, and negotiates a session. `auto` requires exactly one port.
+possible USB reset, and negotiates a session. The existing terminal waiting UI
+covers port opening, board reset settling, and negotiation; it clears on success,
+failure, or interruption. Redirected output receives one plain status line.
+Explicit `connect()` calls also show waiting feedback during negotiation.
+`auto` requires exactly one port.
 Firmware checks and flashing must first release the driving connection. Use an
 injected `ByteTransport` and monotonic clock to test without hardware.
 
