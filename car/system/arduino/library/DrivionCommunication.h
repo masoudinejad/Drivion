@@ -156,8 +156,12 @@ public:
       if (txSize_)
         break;
     }
-    if (!txSize_ && session_ &&
-        now - lastStatusAt_ >= settings_.statusIntervalMs) {
+    const bool statusDue = now - lastStatusAt_ >= settings_.statusIntervalMs;
+    const bool telemetryDue =
+        telemetryInterval_ && now - lastTelemetryAt_ >= telemetryInterval_;
+    // Alternate when both are due, even if only one frame fits per poll.
+    if (!txSize_ && session_ && statusDue &&
+        (!telemetryDue || !lastPeriodicWasStatus_)) {
       uint8_t payload[11];
       put32(payload, now);
       payload[4] = commandActive_ ? 1 : 0;
@@ -165,10 +169,11 @@ public:
       put32(payload + 7, haveCommand_ ? now - lastCommandAt_ : UINT32_MAX);
       send(Status, outboundSequence_++, payload, sizeof(payload));
       lastStatusAt_ = now;
-    } else if (!txSize_ && session_ && telemetryInterval_ &&
-               now - lastTelemetryAt_ >= telemetryInterval_) {
+      lastPeriodicWasStatus_ = true;
+    } else if (!txSize_ && session_ && telemetryDue) {
       sendValues();
       lastTelemetryAt_ = now;
+      lastPeriodicWasStatus_ = false;
     }
     flushTx(txBudget);
   }
@@ -183,7 +188,7 @@ private:
   uint32_t lastStatusAt_ = 0, lastTelemetryAt_ = 0, telemetryInterval_ = 0;
   uint16_t telemetryFields_ = AllFields, outboundSequence_ = 0;
   uint16_t lastRequest_ = 0;
-  bool haveRequest_ = false;
+  bool haveRequest_ = false, lastPeriodicWasStatus_ = false;
   Target target_{};
   ReportedValues values_{};
   uint8_t rx_[MaxFrame]{}, tx_[MaxEncoded]{};
@@ -247,6 +252,7 @@ private:
         telemetryInterval_ = 0;
         telemetryFields_ = AllFields;
         outboundSequence_ = 0;
+        lastPeriodicWasStatus_ = false;
         lastStatusAt_ = lastTelemetryAt_ = now;
         notify(Event::SessionChanged);
       }

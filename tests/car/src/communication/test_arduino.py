@@ -65,7 +65,7 @@ def firmware(tmp_path_factory):
         " size_t write(uint8_t c) {tx.push_back(char(c)); return 1;} };\n"
         "void event(void*, Event e, const Target& t) {\n"
         'std::cout << "E " << int(e) << " " << t.speedMmS << " " << t.steeringCentidegrees << " " << t.sequence << "\\n";}\n'
-        "int main() { Port port; Settings settings{"
+        "int main(int argc, char**) { Port port; Settings settings{"
         + ",".join(
             str(params[key])
             for key in (
@@ -83,16 +83,16 @@ def firmware(tmp_path_factory):
         'if(hex=="P") {int32_t speed; int angle, mask; in >> speed >> angle >> mask; comm.publish(ReportedValues{now,speed,int16_t(angle),uint16_t(mask)});}\n'
         'else if(hex=="B") port.blocked=true; else if(hex=="U") port.blocked=false;\n'
         'else if(hex!="-") {for(size_t i=0;i<hex.size();i+=2) port.rx.push_back(uint8_t(std::stoul(hex.substr(i,2),nullptr,16)));}\n'
-        "for(int i=0;i<100;++i) comm.poll(now);\n"
+        "for(int i=0;i<(argc > 1 ? 1 : 100);++i) comm.poll(now);\n"
         "std::cout << \"W \"; for(unsigned char c:port.tx) std::cout << std::hex << std::setfill('0') << std::setw(2) << unsigned(c);\n"
         'std::cout << std::dec << "\\n"; port.tx.clear(); } }\n'
     )
     return compile_native(source)
 
 
-def run(firmware, lines):
+def run(firmware, lines, *, single_poll=False):
     output = subprocess.run(
-        [str(firmware)],
+        [str(firmware), *(["single-poll"] if single_poll else [])],
         input="\n".join(lines) + "\n",
         text=True,
         capture_output=True,
@@ -285,3 +285,26 @@ def test_oversized_frames_and_unknown_messages_recover(firmware):
         wire.ACK.unpack(f.payload) for f in frames if f.kind == wire.MessageType.ACK
     ] == [(99, 2), (5, 1)]
     assert any(frame.kind == wire.MessageType.SNAPSHOT for frame in frames)
+
+
+def test_periodic_reports_share_bandwidth_with_status(firmware):
+    _, frames = run(
+        firmware,
+        [
+            packet(0, wire.MessageType.HELLO, 0),
+            "1 -",
+            packet(
+                2, wire.MessageType.SET_TELEMETRY, 1, wire.TELEMETRY_CONFIG.pack(100, 3)
+            ),
+            *[f"{now} -" for now in range(102, 1103, 100)],
+        ],
+        single_poll=True,
+    )
+    periodic = [
+        frame.kind
+        for frame in frames
+        if frame.kind in (wire.MessageType.STATUS, wire.MessageType.TELEMETRY)
+    ]
+    assert periodic == [wire.MessageType.STATUS, wire.MessageType.TELEMETRY] * 5 + [
+        wire.MessageType.STATUS
+    ]

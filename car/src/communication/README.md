@@ -191,8 +191,11 @@ milliseconds and intervals strictly below half-range.
 The Arduino stores one bounded encoded TX frame and a 96-byte RX buffer. When
 TX is pending, RX dispatch waits; watchdog checking continues every poll. RX/TX
 work is capped by central parameters. Status and reporting are best effort and
-never queued as an unbounded backlog. The application must poll fast enough for
-the board's hardware serial buffers and select sustainable report intervals.
+never queued as an unbounded backlog. When both periodic messages are due, they
+alternate so status cannot indefinitely starve streaming reports. Their intervals
+are best-effort schedules; constrained polling or serial capacity reduces their
+achieved rates. The application must poll fast enough for the board's hardware
+serial buffers and select sustainable report intervals.
 At 115200 8N1 the theoretical throughput is 11520 bytes/s in each direction;
 50 target frames/s and 10 report frames/s leave substantial wire headroom, but
 hardware tests must check actual loop scheduling and serial-buffer overruns.
@@ -209,7 +212,8 @@ Tests cover framing/FCS, malformed and partial frames, sign conventions, session
 and sequence handling, deadlines, rollover, reporting modes, and client failures.
 A native C++ harness runs the real Arduino header with Python-generated frames.
 Regression cases cover pending and partial responses during synchronization and
-bounded event overflow.
+bounded event overflow. Periodic scheduling tests cover fairness when only one
+frame can be sent per poll.
 An optional Arduino CLI test compiles the complete demo for the Nano without
 uploading. Hardware validation still needs USB reset/reconnect, actual clock
 drift, serial throughput, and integration with the application's stop policy.
