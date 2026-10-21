@@ -78,6 +78,16 @@ class DriveMonitor:
             settings = tomllib.load(source)["drive_monitor"]
         self.cells = settings["gauge_cells_per_side"]
         self.refresh_seconds = settings["refresh_seconds"]
+        self.speed_color = settings["speed_color"]
+        self.steering_color = settings["steering_color"]
+        self.row_spacing = settings["row_spacing"]
+        if (
+            self.speed_color not in self.theme
+            or self.steering_color not in self.theme
+            or type(self.row_spacing) is not int
+            or not 0 <= self.row_spacing <= 3
+        ):
+            raise ValueError("Configure valid monitor colors and row spacing (0 to 3)")
         if (
             type(self.cells) is not int
             or self.cells < 1
@@ -100,10 +110,10 @@ class DriveMonitor:
     def _paint(self, value, style):
         return self.theme[style] + value + self.theme["reset"]
 
-    def _gauge(self, value, cells, signed):
+    def _gauge(self, value, cells, signed, color):
         empty, fill, centre = (".", "#", "|") if self.ascii_only else ("░", "█", "│")
         count = 0 if value is None else round(abs(value) * cells)
-        active = self._paint(fill * count, "cyan")
+        active = self._paint(fill * count, color)
         track = lambda size: self._paint(empty * size, "gray")
         if not signed:
             return active + track(cells - count)
@@ -119,7 +129,9 @@ class DriveMonitor:
         )
         return left + self._paint(centre, "gray") + right
 
-    def _row(self, label, value, mode, signed, negative, neutral, positive, columns):
+    def _row(
+        self, label, value, mode, signed, negative, neutral, positive, columns, color
+    ):
         if mode == "fixed":
             states = ([(negative, -1)] if signed else []) + [
                 (neutral, 0),
@@ -128,7 +140,7 @@ class DriveMonitor:
             state_text = "  ".join(
                 self._paint(
                     f"[{name}]" if value == number else name,
-                    "cyan" if value == number else "gray",
+                    color if value == number else "gray",
                 )
                 for name, number in states
             )
@@ -140,9 +152,9 @@ class DriveMonitor:
             if value is None:
                 plain_width = len("Unavailable")
             return (
-                [label, state_text]
+                [self._paint(label, color), state_text]
                 if plain_width + 10 > columns
-                else [f"{label:<10}{state_text}"]
+                else [f"{self._paint(f'{label:<10}', color)}{state_text}"]
             )
         number = (
             "  -- " if value is None else f"{value:+.2f}" if signed else f" {value:.2f}"
@@ -151,13 +163,13 @@ class DriveMonitor:
         # Fit both gauges to a common compact size; stack in narrow terminals.
         full_cells = min(self.cells, max(1, (columns - 26) // 2))
         cells = full_cells if signed else 2 * full_cells + 1
-        gauge = self._gauge(value, cells, signed)
-        row = f"{label:<10}{low:>4} {gauge} {positive:<3} {number}"
+        gauge = self._gauge(value, cells, signed, color)
+        row = f"{self._paint(f'{label:<10}', color)}{low:>4} {gauge} {positive:<3} {self._paint(number, color)}"
         if columns >= 32:
             return [row]
         return [
-            f"{label} {number}",
-            f"{low} {self._gauge(value, 2 if signed else 5, signed)} {positive}",
+            self._paint(f"{label} {number}", color),
+            f"{low} {self._gauge(value, 2 if signed else 5, signed, color)} {positive}",
         ]
 
     def render(
@@ -206,8 +218,15 @@ class DriveMonitor:
 
             lines = [
                 self._label(title)[: max(0, columns)],
-                compact("Speed", speed, self.speed_mode, "REV", "STOP", "FWD"),
-                compact("Steer", steering, self.steering_mode, "L", "0", "R"),
+                self._paint(
+                    compact("Speed", speed, self.speed_mode, "REV", "STOP", "FWD"),
+                    self.speed_color,
+                ),
+                *([""] * self.row_spacing),
+                self._paint(
+                    compact("Steer", steering, self.steering_mode, "L", "0", "R"),
+                    self.steering_color,
+                ),
             ]
         else:
             lines = [self._paint(self._label(title)[:columns], "bold"), ""]
@@ -220,7 +239,9 @@ class DriveMonitor:
                 "STOP",
                 "FWD",
                 columns,
+                self.speed_color,
             )
+            lines += [""] * self.row_spacing
             lines += self._row(
                 "Steering",
                 steering,
@@ -230,6 +251,7 @@ class DriveMonitor:
                 "CENTRE",
                 "R",
                 columns,
+                self.steering_color,
             )
         if status:
             lines += [""] + [

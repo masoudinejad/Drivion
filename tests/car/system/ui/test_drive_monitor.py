@@ -27,7 +27,10 @@ def test_accurate_signed_gauges_and_colours():
     assert "+0.70" in frame and "-0.30" in frame
     assert "REV" in frame and "FWD" in frame
     assert "\033[36m" in frame and "\033[90m" in frame
-    assert len(frame.splitlines()) == 4
+    assert len(frame.splitlines()) == 5
+    assert "\033[36m" in frame.splitlines()[2]
+    assert frame.splitlines()[3] == ""
+    assert "\033[33m" in frame.splitlines()[4]
 
 
 def test_forward_only_uses_whole_unsigned_gauge():
@@ -50,7 +53,7 @@ def test_all_response_mode_combinations(allow_reverse, speed_mode, steering_mode
         allow_reverse=allow_reverse, speed_mode=speed_mode, steering_mode=steering_mode
     )
     frame = display.render(1, -1)
-    speed, steering = frame.splitlines()[2:4]
+    speed, _, steering = frame.splitlines()[2:5]
     assert ("REV" in speed) == allow_reverse
     assert ("1.00" in speed) == (speed_mode == "accurate")
     assert ("-1.00" in steering) == (steering_mode == "accurate")

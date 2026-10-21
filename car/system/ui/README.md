@@ -242,11 +242,13 @@ information; calibration's validation and keyboard handling stay with its
 caller. Unknown, stale, or disconnected input should be reported by the source,
 not inferred from an unchanged driving demand.
 
-The monitor uses the existing cyan/gray palette, green completion statuses, and
+The monitor uses cyan for speed, amber for steering, gray tracks, a blank line
+between controls, green completion statuses, and
 alternate-screen ownership. It adapts to narrow terminals, supports `NO_COLOR`,
 uses ASCII gauges for incompatible stream encodings, and produces plain frames
 for redirected output. Dimensions and redraw timing live in `[drive_monitor]`
-in `theme.toml`. Use a context manager to restore the cursor and screen on exit.
+in `theme.toml`, including `speed_color`, `steering_color`, and `row_spacing`.
+Use a context manager to restore the cursor and screen on exit.
 
 The compact gauges and separate status row take layout inspiration from the
 [CarStream CLI dashboard](https://pypi.org/project/carstream-cli/). This display
