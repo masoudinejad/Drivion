@@ -59,7 +59,7 @@ def test_partial_evaluation_replaces_stale_devices_and_keeps_deployment(root):
     assert stored["camera"] == {"status": "missing", "devices": []}
     assert stored["checks"]["status"] == "error"
     assert stored["checks"]["checked_at"]
-    worker.assert_called_once_with(root, root)
+    worker.assert_called_once_with(root, root, check_environment=False)
 
 
 def test_missing_environment_is_recorded_instead_of_aborting(root):
@@ -151,7 +151,7 @@ def test_runtime_records_camera_even_when_config_and_dependencies_fail(
             )
         ),
     )
-    result = runtime.evaluate(root)
+    result = runtime.evaluate(root, check_environment=True)
     assert result["configuration"]["error"] == "bad config"
     assert result["environment"]["status"] == "error"
     assert result["camera"]["devices"] == [
@@ -228,3 +228,61 @@ def test_explicit_evaluation_can_fail_provisioning_after_saving_report(root):
     with patch.object(update, "refresh_info", return_value=report) as refresh:
         assert update.main(["--car-root", str(root), "--require-runtime"]) == 1
     refresh.assert_called_once()
+
+
+def test_default_hardware_evaluation_never_runs_environment_checks(root, monkeypatch):
+    from car.src.joystick import discovery
+
+    verify = MagicMock(
+        side_effect=AssertionError("Boot must not verify the environment")
+    )
+    monkeypatch.setattr(runtime, "evaluate_environment", verify)
+    monkeypatch.setattr(discovery, "discover", lambda: ([], []))
+    monkeypatch.setitem(
+        sys.modules,
+        "picamera2",
+        SimpleNamespace(
+            Picamera2=SimpleNamespace(
+                global_camera_info=lambda: [{"Id": "/base/camera", "Model": "imx219"}]
+            )
+        ),
+    )
+    result = runtime.evaluate(root)
+    verify.assert_not_called()
+    assert result["environment"]["status"] == "not_checked"
+    assert "dependencies" not in result["environment"]
+    assert result["configuration"]["status"] == "ok"
+    assert result["camera"]["devices"][0]["id"] == "/base/camera"
+
+
+@pytest.mark.parametrize("flag", ["--check-environment", "--require-runtime"])
+def test_full_environment_verification_is_explicit(root, flag):
+    report = {"configuration": {"status": "ok"}, "environment": {"status": "ok"}}
+    with patch.object(update, "refresh_info", return_value=report) as refresh:
+        assert update.main(["--car-root", str(root), flag]) == 0
+    assert refresh.call_args.kwargs["check_environment"] is True
+
+
+def test_skipped_environment_does_not_fail_boot_readiness(root):
+    result = runtime_result()
+    result["environment"] = {"status": "not_checked"}
+    result["camera"]["status"] = "ok"
+    result["joystick"]["status"] = "ok"
+    with (
+        patch.object(update, "runtime_info", return_value=result),
+        patch.object(
+            update, "hardware_info", return_value={"serial_number": "000000123456"}
+        ),
+        patch.object(
+            update,
+            "discover",
+            return_value={
+                "status": "ok",
+                "ports": [{"port": {"address": "/dev/ttyUSB0"}}],
+            },
+        ),
+    ):
+        report = update.collect_info(root)
+    assert report["checks"]["status"] == "ok"
+    assert report["checks"]["environment_checked"] is False
+    assert report["checks"]["failed"] == []

@@ -13,28 +13,9 @@ import tomllib
 from pathlib import Path
 
 
-def evaluate(car_root):
-    """Collect independent failures without skipping the remaining evaluations."""
-    root = Path(car_root).resolve()
-    sys.path.insert(0, str(root.parent))
+def evaluate_environment(root):
+    """Run the full software verification only when explicitly requested."""
     from ..environment import environment_path
-
-    results = {}
-    config = None
-    try:
-        from car.src.config import load_config
-
-        config = load_config(root / "config.toml")
-        results["configuration"] = {"status": "ok"}
-    except (
-        ImportError,
-        OSError,
-        RuntimeError,
-        TypeError,
-        ValueError,
-        KeyError,
-    ) as error:
-        results["configuration"] = {"status": "error", "error": str(error)}
 
     environment = {
         "status": "ok",
@@ -70,7 +51,38 @@ def evaluate(car_root):
         KeyError,
     ) as error:
         environment.update(status="error", error=str(error))
-    results["environment"] = environment
+    return environment
+
+
+def evaluate(car_root, *, check_environment=False):
+    """Collect independent failures without skipping the remaining evaluations."""
+    root = Path(car_root).resolve()
+    sys.path.insert(0, str(root.parent))
+    results = {}
+    config = None
+    try:
+        from car.src.config import load_config
+
+        config = load_config(root / "config.toml")
+        results["configuration"] = {"status": "ok"}
+    except (
+        ImportError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        KeyError,
+    ) as error:
+        results["configuration"] = {"status": "error", "error": str(error)}
+
+    results["environment"] = (
+        evaluate_environment(root)
+        if check_environment
+        else {
+            "status": "not_checked",
+            "reason": "Environment verification is reserved for provisioning or explicit checks",
+        }
+    )
 
     try:
         # Import Picamera2 directly: inventory does not need application NumPy or
@@ -144,8 +156,14 @@ def evaluate(car_root):
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("car_root", type=Path)
+    parser.add_argument("--check-environment", action="store_true")
+    args = parser.parse_args()
     with contextlib.redirect_stdout(sys.stderr):
-        result = evaluate(sys.argv[1])
+        result = evaluate(args.car_root, check_environment=args.check_environment)
     print(json.dumps(result))
 
 

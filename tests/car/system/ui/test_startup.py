@@ -48,3 +48,13 @@ def test_display_preview_does_not_claim_checks_passed(capsys):
     output = capsys.readouterr().out
     assert "No saved system evaluation available" in output
     assert "Configuration: ok" not in output
+
+
+def test_skipped_environment_is_informational(capsys, caplog):
+    snapshot = report()
+    snapshot["environment"] = {"status": "not_checked"}
+    show_startup(snapshot)
+    output = capsys.readouterr().out
+    assert "[info] Environment: not checked" in output
+    assert "[warning] Environment" not in output
+    assert not caplog.records

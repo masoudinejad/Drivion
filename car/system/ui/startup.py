@@ -79,12 +79,19 @@ def show_startup(report=None):
             result = report.get(name, {})
             status = result.get("status", "unknown")
             detail = result.get("error", "")
-            prefix = f"{green}{mark}{reset}" if status == "ok" else "[warning]"
-            message = f"{name.capitalize()}: {status}" + (
+            if status == "ok":
+                prefix = f"{green}{mark}{reset}"
+            else:
+                prefix = "[info]" if status == "not_checked" else "[warning]"
+            message = f"{name.capitalize()}: {status.replace('_', ' ')}" + (
                 f" — {detail}" if detail else ""
             )
             print(f"  {prefix} {message}")
-            log.log(logging.INFO if status == "ok" else logging.WARNING, "%s", message)
+            log.log(
+                logging.INFO if status in ("ok", "not_checked") else logging.WARNING,
+                "%s",
+                message,
+            )
         for camera in report.get("camera", {}).get("devices", []):
             identity = (
                 f"Camera {camera['index']}: model={camera['model']} id={camera['id']}"

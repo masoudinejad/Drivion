@@ -23,29 +23,37 @@ validates and installs the new state.
 ## Central hardware and software evaluation
 
 `information.update.refresh_info()` runs the initial evaluations together at
-**Pi boot** and atomically writes `system/info.toml`. It also supports explicit
-manual checks and post-installation verification. `drive.py` only enters the
+**Pi boot** and atomically writes `system/info.toml`. Automatic boot checks
+cover configuration and hardware; they skip environment/dependency verification.
+Full software verification is reserved for provisioning or explicit requests.
+`drive.py` only enters the
 configured Python environment, validates the live configuration, and displays
-the last saved report; it never runs the full evaluation or changes its timestamp.
+the last saved report; it never runs the full evaluation or changes its
+timestamp.
 Code sync only updates deployment metadata while preserving the last evaluation.
 Provisioning explicitly runs the central check after installing dependencies;
 its package consistency check remains an installation-specific check.
 
 The generated snapshot contains:
 
-- `checks`: overall status, UTC evaluation time, evaluated deployment commit, and
-  sections requiring attention. Compare `evaluated_commit` with `software.commit`
+- `checks`: overall status, UTC evaluation time, evaluated deployment commit,
+and
+  sections requiring attention. Compare `evaluated_commit` with
+`software.commit`
   to see whether the latest code has been evaluated.
-- `software`: deployed version, commit, dirty flag, checksum, and deployment time.
+- `software`: deployed version, commit, dirty flag, checksum, and deployment
+time.
   These are preserved deployment records, not a fresh integrity verification.
 - `configuration`: validation of the complete application configuration.
-- `environment`: configured Python path, executable, version, and every declared
-  dependency's installed version, import result, and failure details. System
-  imports are checked as well.
+- `environment`: `status = "not_checked"` during normal boot checks. Explicit
+  full checks record Python path, executable, version, and every declared
+  dependency's installed version, import result, and failure details, including
+  system imports. `checks.environment_checked` records which mode was used.
 - `hardware`: Raspberry Pi model and serial number.
 - `camera`: all detected camera models, connection IDs, indexes, and available
   location/rotation fields. IDs are connection identities, not module serials.
-- `arduino`: discovered ports, USB identity, selection, and any retained firmware
+- `arduino`: discovered ports, USB identity, selection, and any retained
+firmware
   observation, explicitly marked as historical by the existing firmware fields.
 - `joystick`: detected controller identities and paths, discovery errors, and
   whether the saved selection resolves to one connected device.
@@ -59,30 +67,41 @@ new snapshot instead of leaving stale identities or aborting unrelated checks.
 The driving screen labels these as saved results and displays their timestamp;
 it does not use old results to reject the current runtime. The launcher still
 rejects an invalid live configuration or missing Python environment immediately.
-The information-update CLI returns success when the snapshot was published; inspect
+The information-update CLI returns success when the snapshot was published;
+inspect
 `checks.status` and per-section statuses for readiness. Hotspot-update errors
 still produce an unsuccessful exit. `--require-runtime`, used by provisioning,
-also exits unsuccessfully for configuration or environment evaluation failures.
+requests the full environment check and exits unsuccessfully for configuration
+or environment evaluation failures. Skipped environment checks are informational
+and do not count as failed hardware readiness checks.
 
-Dependency imports run in isolated subprocesses using the configured environment.
+When requested, dependency imports run in isolated subprocesses using the
+configured environment.
 The root boot collector drops to the car directory owner's UID, GID and group
 memberships before executing the user-managed environment or deployed worker.
 Its own modules and configuration remain protected. Per-import and whole-worker
 timeouts live under `tool.drivion.verification` in `system/pyproject.toml`;
-numerical thread limits use `tool.drivion.execution`. Full import checks can take
+numerical thread limits use `tool.drivion.execution`. Full import checks can
+take
 some time on a Pi. The boot service uses these internal bounds instead of
 systemd's shorter default startup timeout.
 
 The initial evaluation does not capture frames, reset/open Arduino serial
-communication, consume joystick input, or drive actuators. Use **Hardware tests**
+communication, consume joystick input, or drive actuators. Use **Hardware
+tests**
 for functional and latency diagnostics. Those tests keep their detailed logs.
 
-Inspect the snapshot with `cat ~/car/system/info.toml` or **System Info**. Refresh
+Inspect the snapshot with `cat ~/car/system/info.toml` or **System Info**.
+Refresh
 it explicitly from the car directory with:
 
 ```sh
-./system/env/drivion/bin/python -m system.information.update --car-root . --print
+./system/env/drivion/bin/python -m system.information.update --car-root .
+--print
 ```
+
+Add `--check-environment` to that command for the full dependency version/import
+sweep. Normal boot and manual hardware refreshes do not import the full stack.
 
 The record is separate from `config.toml` and should not be edited. Moving the
 SD card to another Pi updates the hardware record and hotspot SSID at boot.
@@ -111,7 +130,8 @@ Python environment automatically. Provision it with Ansible before launching.
 the `MenuItem` registry; `ui/navigation.py` adapts the existing Bash menu and
 provides read-only pages. `information/view.py` handles loading and rendering
 information separately from boot-time publishing in `information/update.py`.
-To add setup, settings, or administration features, implement an action accepting
+To add setup, settings, or administration features, implement an action
+accepting
 the car root and register a `MenuItem` in `default_items()`. Actions may compose
 submenus with the same UI helpers. Only implemented categories appear in the
 menu. Future configurable behavior belongs in `car/config.toml`; styling stays
@@ -148,7 +168,8 @@ Flashing requires a selected address or an unambiguous `auto` target.
 ### Change Arduino firmware
 
 Open **Arduino → Change firmware** to list firmware registrations from the
-central `[firmware]` TOML table. Parameter values come from that table; versions,
+central `[firmware]` TOML table. Parameter values come from that table;
+versions,
 board FQBNs and required parameter contracts come from each sketch's own
 `firmware.toml`. Build/serial settings live in system tool metadata TOML.
 Select one to run the existing compile procedure and then flash its returned
@@ -165,7 +186,8 @@ sketch integration, and the compile/flash contracts.
 
 ### Check running Arduino firmware
 
-Open **Arduino → Check firmware** to query the selected device using the existing
+Open **Arduino → Check firmware** to query the selected device using the
+existing
 firmware-check procedure. Its confirmation and waiting indicators are preserved.
 The result page shows the reported identity or query error and observation time;
 Enter returns to the Arduino submenu. Declining confirmation returns directly.
@@ -192,14 +214,16 @@ time, and read count with minimum/mean/maximum read duration. Input changes are
 written only to the saved log/report so they do not flash over the live bars.
 It sends no driving
 commands and does not modify calibration. Read duration measures kernel queries
-and normalization, not physical controller-to-host latency. Refresh and idle-hint
+and normalization, not physical controller-to-host latency. Refresh and
+idle-hint
 timing reuse `[tool.drivion.joystick_setup]` in `system/pyproject.toml`. Read
 statistics use constant memory, even during a long interactive check.
 
 Each run prints progress and results to the terminal and writes a separate
 UTC-timestamped `.log` file under the `[hardware_tests].log_directory` path,
 relative to the car root. Failures include tracebacks; cancellation records an
-interrupted result. The result page includes the log path. Configure frame count,
+interrupted result. The result page includes the log path. Configure frame
+count,
 Arduino sample count, and response timeout in `[hardware_tests]` in
 `car/config.toml`; camera and serial settings come from their existing sections.
 
@@ -212,11 +236,13 @@ warmup are excluded from capture throughput. Arduino handshake and telemetry
 latencies measure host request/response round trips, including serial I/O and
 polling; they are not one-way delays. Initial connection time includes the board
 boot wait and is reported separately. Missing replies fail after the configured
-response timeout (subject to an in-progress serial read). Camera capture uses the
+response timeout (subject to an in-progress serial read). Camera capture uses
+the
 camera driver's blocking call; an unresponsive driver may require interruption.
 
 Generated information is a recoverable cache: malformed `system/info.toml`
-records are reported and rebuilt without reusing invalid metadata. Wi-Fi fallback
+records are reported and rebuilt without reusing invalid metadata. Wi-Fi
+fallback
 is ordered after information refresh but does not require refresh to succeed,
 so recovery access remains available when information collection fails.
 Hardware diagnostics require the optional `[hardware_tests]` section; if absent,

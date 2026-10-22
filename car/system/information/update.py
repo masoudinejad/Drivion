@@ -141,7 +141,7 @@ def existing_software(info_file):
     return software if isinstance(software, dict) else {}
 
 
-def runtime_info(car_root, config_root):
+def runtime_info(car_root, config_root, *, check_environment=False):
     """Run user-managed Python only as the car directory's unprivileged owner."""
     try:
         settings = python_environment_settings(config_root)
@@ -191,6 +191,7 @@ def runtime_info(car_root, config_root):
                 "-m",
                 "system.information.runtime",
                 str(Path(car_root).resolve()),
+                *(["--check-environment"] if check_environment else []),
             ],
             cwd=car_root,
             env=environment,
@@ -239,6 +240,7 @@ def collect_info(
     software=None,
     device_tree=Path("/proc/device-tree"),
     config_root=None,
+    check_environment=False,
 ):
     """Evaluate hardware and software once, preserving deployment metadata only.
 
@@ -283,7 +285,9 @@ def collect_info(
         }
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         sections["network"] = {"status": "error", "error": str(error)}
-    sections.update(runtime_info(car_root, config_root))
+    sections.update(
+        runtime_info(car_root, config_root, check_environment=check_environment)
+    )
     failed = [
         name
         for name in (
@@ -295,7 +299,7 @@ def collect_info(
             "camera",
             "joystick",
         )
-        if sections[name].get("status") != "ok"
+        if sections[name].get("status") not in ("ok", "not_checked")
     ]
     sections["checks"] = {
         "status": (
@@ -307,6 +311,7 @@ def collect_info(
         ),
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "evaluated_commit": sections["software"].get("commit", "unknown"),
+        "environment_checked": check_environment,
         "failed": failed,
     }
     return sections
@@ -391,12 +396,20 @@ def main(argv=None):
         action="store_true",
         help="Return failure for configuration or environment errors",
     )
+    parser.add_argument(
+        "--check-environment",
+        action="store_true",
+        help="Also verify dependency versions and imports (slow)",
+    )
     parser.add_argument("--device-tree", type=Path, default=Path("/proc/device-tree"))
     parser.add_argument("--update-hotspot", action="store_true")
     parser.add_argument("--print", action="store_true", dest="print_info")
     args = parser.parse_args(argv)
     if args.deployment_only and (
-        not args.software_stdin or args.update_hotspot or args.require_runtime
+        not args.software_stdin
+        or args.update_hotspot
+        or args.require_runtime
+        or args.check_environment
     ):
         parser.error(
             "--deployment-only requires --software-stdin and excludes evaluation options"
@@ -412,6 +425,7 @@ def main(argv=None):
                 software=software,
                 device_tree=args.device_tree,
                 config_root=config_root,
+                check_environment=args.check_environment or args.require_runtime,
             )
         content = render_info(sections)
         if args.update_hotspot:

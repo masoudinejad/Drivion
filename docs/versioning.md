@@ -1,6 +1,7 @@
 # Code versions and deployment records
 
-Git commits identify development history. Tag releases with `vMAJOR.MINOR.PATCH`,
+Git commits identify development history. Tag releases with
+`vMAJOR.MINOR.PATCH`,
 such as `v0.1.0`: increment MAJOR for incompatible changes, MINOR for compatible
 features, and PATCH for fixes. Tags are created explicitly when a release is
 ready; syncing does not create commits or tags.
@@ -43,14 +44,18 @@ snapshot even when changes have not been committed.
 
 Sync first freezes the deployable car files in a local temporary directory.
 The checksum includes sorted relative file paths, contents, executable bits,
-and symlink targets. Environments, caches, secrets, and the version record itself
+and symlink targets. Environments, caches, secrets, and the version record
+itself
 are excluded. Rsync checks file contents and transfers that frozen snapshot.
 The record is atomically published after a successful transfer. Dry runs and
 SSH key setup do not update it. On every boot, the same atomic publisher keeps
 the software section and refreshes the other sections from the running Pi. The
-Pi needs Python 3 for publishing the record. Full dependency and device checks
-run at boot or on explicit request, never on sync or driving start. The
-`checks.evaluated_commit` field identifies the deployment present during the last
+Pi needs Python 3 for publishing the record. Device checks run at boot or on
+explicit request, never on sync or driving
+start. Full dependency verification is opt-in (`--check-environment`) and also
+runs during provisioning. The
+`checks.evaluated_commit` field identifies the deployment present during the
+last
 evaluation; it can differ from `software.commit` after a later sync.
 
 File transfer itself is not atomic: an interrupted transfer can leave partially
@@ -65,7 +70,8 @@ cat ~/car/system/info.toml
 
 Python consumers can read it with the standard `tomllib` module on Python 3.11+.
 
-Normal sync hashes the transferred code and `config.defaults.toml`; the preserved
+Normal sync hashes the transferred code and `config.defaults.toml`; the
+preserved
 Pi `config.toml` is runtime state outside that code checksum. With
 `--replace-config`, the transferred active configuration is included too. A
 first deployment initializes the active configuration from the defaults.
