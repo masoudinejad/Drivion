@@ -49,6 +49,7 @@ evaluation_timeout_seconds = 900
 command_timeout_seconds = 180
 
 [tool.drivion.verification.imports]
+pillow = "PIL"
 opencv-python-headless = "cv2"
 scikit-learn = "sklearn"
 xgboost-cpu = "xgboost"

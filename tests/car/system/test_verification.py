@@ -86,3 +86,15 @@ def test_invalid_system_package_rejected(tmp_path):
     )
     with pytest.raises(ValueError, match="packages"):
         system_settings(tmp_path)
+
+
+def test_project_pillow_dependency_uses_its_python_module():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3] / "car"
+    modules = {
+        requirement.name: module
+        for requirement, module in verification.verification_plan(root)
+        if requirement is not None
+    }
+    assert modules["pillow"] == "PIL"
