@@ -30,12 +30,15 @@ def root(tmp_path):
 def test_camera_records_latency_and_separate_logs(root):
     terminal = io.StringIO()
     camera = MagicMock()
+    camera.camera_id = "/base/camera"
+    camera.model = "imx219"
     camera.single_capture.return_value = np.zeros((480, 640, 3), dtype=np.uint8)
     with patch("car.src.camera.camera.Camera") as factory:
         factory.return_value.__enter__.return_value = camera
         for _ in range(2):
             transcript = run_check(root, "camera", stream=terminal)
             assert "PASS" in transcript
+            assert "Camera identity: id=/base/camera model=imx219" in transcript
             assert "Capture latency ms" in transcript
             assert "observed throughput" in transcript
         assert factory.return_value.__exit__.call_count == 2

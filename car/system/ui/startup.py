@@ -1,5 +1,6 @@
 """Compact terminal startup display for the driving entry point."""
 
+import logging
 import os
 import shutil
 import sys
@@ -62,4 +63,18 @@ def show_startup():
     print()
     print(f"  {green}{mark}{reset} Configuration loaded")
     print(f"  {green}{mark}{reset} Python environment ready")
+    from car.src.camera.camera import camera_inventory
+
+    log = logging.getLogger(__name__)
+    try:
+        cameras = camera_inventory()
+        if not cameras:
+            raise RuntimeError("No cameras detected")
+        for index, camera in enumerate(cameras):
+            identity = f"model={camera.get('Model')} id={camera['Id']}"
+            log.info("Camera %d detected: %s", index, identity)
+            print(f"  {green}{mark}{reset} Camera {index} detected: {identity}")
+    except (ImportError, OSError, RuntimeError) as error:
+        log.warning("Camera detection failed: %s", error)
+        print(f"  [warning] Camera detection failed: {error}")
     print(f"\n  {dim}Driving functionality is not implemented yet.{reset}\n")

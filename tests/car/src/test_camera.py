@@ -1,6 +1,7 @@
 """Exercise capture, persistence and device cleanup without Raspberry Pi hardware."""
 
 from copy import deepcopy
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -17,8 +18,12 @@ def camera_config(**overrides):
 
 class FakeCamera:
     def __init__(self):
+        self.camera = SimpleNamespace(id="/base/test/imx219@10")
         self.camera_controls = {"FrameDurationLimits": (23895, 1_000_000, None)}
-        self.camera_properties = {"ScalerCropMaximum": (0, 0, 3280, 2464)}
+        self.camera_properties = {
+            "Model": "imx219",
+            "ScalerCropMaximum": (0, 0, 3280, 2464),
+        }
         self.started = self.stopped = self.closed = False
         self.array = None
 
@@ -183,3 +188,29 @@ def test_save_rejects_misleading_suffix_and_wrong_shape(tmp_path):
         module.save_frame(frame, tmp_path / "frame.jpg", config)
     with pytest.raises(ValueError, match="shape"):
         module.save_frame(frame[:10], tmp_path / "frame", config)
+
+
+def test_identity_is_logged_and_remains_available_after_close(device, caplog):
+    with (
+        caplog.at_level("INFO", logger=module.__name__),
+        module.Camera(camera_config()) as camera,
+    ):
+        assert camera.camera_id == device.camera.id
+        assert camera.model == "imx219"
+    assert camera.camera_id == "/base/test/imx219@10"
+    assert "id=/base/test/imx219@10 model=imx219" in caplog.text
+
+
+def test_inventory_does_not_acquire_camera(monkeypatch):
+    import sys
+
+    info = {"Id": "/base/test/imx219@10", "Model": "imx219", "Num": 0}
+    monkeypatch.setitem(
+        sys.modules,
+        "picamera2",
+        SimpleNamespace(Picamera2=SimpleNamespace(global_camera_info=lambda: [info])),
+    )
+    inventory = module.camera_inventory()
+    assert inventory == [info]
+    inventory[0]["Model"] = "changed"
+    assert info["Model"] == "imx219"

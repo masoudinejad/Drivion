@@ -32,6 +32,7 @@ def check_camera(root, config, settings, log):
 
     started = time.monotonic()
     with Camera(config) as camera:
+        log.info("Camera identity: id=%s model=%s", camera.camera_id, camera.model)
         log.info(
             "Camera initialization latency: %.3f ms",
             (time.monotonic() - started) * 1000,

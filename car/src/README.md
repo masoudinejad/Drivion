@@ -151,3 +151,19 @@ with firmware tooling. Application configuration and hardware components can be
 imported without the management package or terminal UI. The driving entry point
 validates the full configuration after entering its Python environment and before
 showing successful startup status.
+
+### Camera identity
+
+`Camera.camera_id` exposes the opened camera's libcamera ID, and `Camera.model`
+exposes its sensor model. Both remain available after closing the camera and are
+logged during initialization and in camera hardware diagnostic reports.
+`camera_inventory()` in `car.src.camera.camera` returns Picamera2 camera
+information without acquiring a device. Startup reports detected IDs and models,
+or a warning if discovery fails or no cameras are found. Detection does not
+verify frame capture; use the camera hardware diagnostic for that check.
+
+The ID identifies a connection, not a unique physical module serial number. It
+can be reused for later identification with an unchanged connection, but moving
+the camera or changing hardware, firmware, or Device Tree can change it. A
+replacement module on the same connection may have the same ID. Treat IDs as
+opaque strings. See the [libcamera ID documentation](https://libcamera.org/api-html/classlibcamera_1_1Camera.html).

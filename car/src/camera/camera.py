@@ -14,6 +14,17 @@ from car.src.configuration.schema import CameraConfig
 logger = logging.getLogger(__name__)
 
 
+def camera_inventory() -> list[dict]:
+    """Return Picamera2 IDs and models without acquiring or starting cameras.
+
+    IDs identify connections, not unique physical module serial numbers.
+    Discovery/import errors propagate so callers can report a failed check.
+    """
+    from picamera2 import Picamera2
+
+    return [dict(info) for info in Picamera2.global_camera_info()]
+
+
 def _create_camera():
     # Keep configuration, saving and tests usable on machines without libcamera.
     from picamera2 import Picamera2
@@ -82,6 +93,9 @@ class Camera:
         self._started = False
         self.camera = _create_camera()
         try:
+            self.camera_id = self.camera.camera.id
+            self.model = self.camera.camera_properties.get("Model")
+            logger.info("Camera identity: id=%s model=%s", self.camera_id, self.model)
             self._configure()
             self.camera.start(show_preview=False)
             self._started = True
