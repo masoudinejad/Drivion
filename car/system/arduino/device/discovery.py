@@ -6,8 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import tomllib
-
 from ...configuration import arduino_settings, arduino_toolchain_settings
 
 
@@ -280,11 +278,14 @@ def retain_firmware_info(current, previous):
     replacement boards sharing VID/PID and address, so this is historical data.
     """
     previous_ports = previous.get("ports", [previous])
+    if not isinstance(previous_ports, list):
+        previous_ports = []
     for port in current.get("ports", [current]):
         matches = [
             old
             for old in previous_ports
-            if port.get("address")
+            if isinstance(old, dict)
+            and port.get("address")
             and all(
                 port.get(key) == old.get(key)
                 for key in ("address", "serialNumber", "vid", "pid")
@@ -318,11 +319,11 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     # Import here to keep discovery usable by the information collector.
-    from ...information.update import INFO_PATH, publish
+    from ...information.update import INFO_PATH, existing_info, publish
 
     try:
         path = args.car_root / INFO_PATH
-        sections = tomllib.loads(path.read_text()) if path.exists() else {}
+        sections = existing_info(path)
         report = discover(args.car_root, args.config_root)
         sections["arduino"] = retain_firmware_info(
             compact_report(report), sections.get("arduino", {})

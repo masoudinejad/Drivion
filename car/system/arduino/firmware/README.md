@@ -129,3 +129,8 @@ The sketchbook, shared library, build output, and flash logs must be disjoint,
 including after resolving symlinks. Library staging also rejects recursive
 copying independently. Central settings remain in TOML; generated manifests
 capture the board and serial contract for each retained build.
+
+Generated `system/info.toml` is a recoverable cache. Discovery and firmware
+status updates rebuild invalid records; compilation uses an unknown deployment
+identity when usable software metadata is unavailable. These recovery paths do
+not bypass validation of runtime configuration, firmware definitions or builds.

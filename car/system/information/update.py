@@ -113,9 +113,9 @@ def software_from_text(content):
 
 
 def existing_info(info_file):
-    """Treat generated observations as a cache; recover from corrupt records."""
+    """Read usable generated tables, recovering from corrupt or malformed caches."""
     try:
-        return tomllib.loads(Path(info_file).read_text(encoding="utf-8"))
+        sections = tomllib.loads(Path(info_file).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
     except (ValueError, UnicodeError) as error:
@@ -123,6 +123,9 @@ def existing_info(info_file):
             "Ignoring invalid system information: %s", error
         )
         return {}
+    return {
+        name: values for name, values in sections.items() if isinstance(values, dict)
+    }
 
 
 def existing_software(info_file):
@@ -143,9 +146,6 @@ def collect_info(
     hardware = hardware_info(device_tree)
     info_file = car_root / INFO_PATH
     previous = existing_info(info_file)
-    for section in ("software", "arduino"):
-        if not isinstance(previous.get(section, {}), dict):
-            previous.pop(section)
     return {
         "software": (previous.get("software", {}) if software is None else software),
         "hardware": hardware,

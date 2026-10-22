@@ -39,10 +39,17 @@ def car_root(car_tree):
     return root
 
 
-def test_compile_generated_header_and_cli(car_root):
-    (car_root / "system/info.toml").write_text(
-        '[software]\ncommit = "abc123"\ndirty = true\n'
-    )
+@pytest.mark.parametrize(
+    "cache,commit,dirty",
+    [
+        (b'[software]\ncommit = "abc123"\ndirty = true\n', "abc123", True),
+        (b"[broken", "unknown", False),
+        (b"\xff", "unknown", False),
+        (b"software = 7\n", "unknown", False),
+    ],
+)
+def test_compile_generated_header_and_cli(car_root, cache, commit, dirty):
+    (car_root / "system/info.toml").write_bytes(cache)
 
     def compile_output(command, **kwargs):
         output = Path(command[command.index("--output-dir") + 1])
@@ -63,8 +70,8 @@ def test_compile_generated_header_and_cli(car_root):
     waiting.assert_called_once()
     header = (artifacts.parent / "demo/drivion_generated.h").read_text()
     assert '#define DRIVION_FIRMWARE_VERSION "1.2.0"' in header
-    assert '#define DRIVION_GIT_COMMIT "abc123"' in header
-    assert "#define DRIVION_SOURCE_DIRTY true" in header
+    assert f'#define DRIVION_GIT_COMMIT "{commit}"' in header
+    assert f"#define DRIVION_SOURCE_DIRTY {str(dirty).lower()}" in header
     assert '#define LABEL "a\\042b"' in header
     assert "#define PIN 5UL" in header
     assert not (car_root / "system/arduino/sketches/demo/drivion_generated.h").exists()

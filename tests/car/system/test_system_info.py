@@ -161,3 +161,37 @@ def test_corrupt_generated_info_is_rebuilt(tmp_path, content, caplog):
     assert rebuilt["hardware"]["serial_number"] == "00000000a4f29c"
     if content in (b"[broken", b"\xff"):
         assert "Ignoring invalid system information" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"[broken",
+        b"\xff",
+        b"software = 7\narduino = false\n",
+        b"[arduino]\nports = false\n",
+        b"[arduino]\nports = [7, false]\n",
+    ],
+)
+@pytest.mark.parametrize("operation", ["status", "discovery"])
+def test_firmware_records_recover_from_corrupt_generated_cache(
+    tmp_path, content, operation
+):
+    from car.system.arduino.device import discovery, status
+
+    path = tmp_path / "system/info.toml"
+    path.parent.mkdir()
+    path.write_bytes(content)
+    address = "/dev/ttyUSB0"
+    report = {"status": "ok", "ports": [{"port": {"address": address}}]}
+    if operation == "status":
+        status.update_firmware_info(
+            tmp_path, report, address, {"firmware_status": "reported"}
+        )
+    else:
+        with patch.object(discovery, "discover", return_value=report):
+            assert discovery.main(["--car-root", str(tmp_path)]) == 0
+    rebuilt = tomllib.loads(path.read_text())
+    assert rebuilt["arduino"]["address"] == address
+    if operation == "status":
+        assert rebuilt["arduino"]["firmware_status"] == "reported"

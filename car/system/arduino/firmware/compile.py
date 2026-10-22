@@ -9,9 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import tomllib
-
-from ...information.update import INFO_PATH, publish
+from ...information.update import INFO_PATH, existing_software, publish
 from ...ui.navigation import confirm
 from ...ui.progress import show_progress
 from ..settings import load_context, require_disjoint
@@ -104,11 +102,7 @@ def compile_firmware(name, car_root=None, *, context=None):
         raise ValueError("Sketch files must not be symlinks")
     if (source / settings["header_filename"]).exists():
         raise ValueError("Generated header must not exist in the source sketch")
-    info = root / INFO_PATH
-    software = {}
-    if info.is_file():
-        with info.open("rb") as stream:
-            software = tomllib.load(stream).get("software", {})
+    software = existing_software(root / INFO_PATH)
     header = render_header(name, firmware, software, flash_settings)
     if not confirm(
         f"Compile {name} {firmware['version']} for {firmware['fqbn']}? (No upload)"

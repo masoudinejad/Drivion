@@ -2,9 +2,7 @@
 
 from datetime import datetime, timezone
 
-import tomllib
-
-from ...information.update import INFO_PATH, publish
+from ...information.update import INFO_PATH, existing_info, publish
 from .discovery import compact_report, retain_firmware_info
 
 
@@ -24,7 +22,7 @@ def update_firmware_info(
 ):
     """Replace this port's cached identity, optionally keeping last-flash provenance."""
     path = root / INFO_PATH
-    sections = tomllib.loads(path.read_text()) if path.exists() else {}
+    sections = existing_info(path)
     arduino = retain_firmware_info(compact_report(report), sections.get("arduino", {}))
     ports = arduino.get("ports", [arduino])
     for port in ports:
