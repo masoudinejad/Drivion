@@ -50,19 +50,24 @@ def verification_plan(car_root):
     return checks
 
 
-def verify(car_root):
-    failures = []
+def dependency_report(car_root):
+    """Check every configured dependency once and return serializable results."""
     timeout = verification_timeout(car_root)
+    results = []
     for requirement, module in verification_plan(car_root):
-        label = str(requirement) if requirement else f"system:{module}"
+        item = {
+            "requirement": str(requirement) if requirement else "system:" + module,
+            "module": module,
+            "status": "ok",
+        }
         try:
             if requirement:
                 installed = importlib.metadata.version(requirement.name)
+                item["installed_version"] = installed
                 if not requirement.specifier.contains(installed, prereleases=True):
                     raise ValueError(
                         f"Installed {installed} does not satisfy {requirement}"
                     )
-            print(f"Checking {label} -> {module}", flush=True)
             subprocess.run(
                 [
                     sys.executable,
@@ -71,19 +76,34 @@ def verify(car_root):
                 ],
                 check=True,
                 timeout=timeout,
+                capture_output=True,
+                text=True,
             )
-            print(f"OK: {label}", flush=True)
         except (
             importlib.metadata.PackageNotFoundError,
             ValueError,
+            OSError,
             subprocess.SubprocessError,
         ) as error:
-            failures.append(label)
-            print(f"FAILED: {label}: {error}", file=sys.stderr, flush=True)
-    if failures:
+            item["status"] = "error"
+            item["error"] = str(error)
+            if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+                item["error"] += "\n" + error.stderr.strip()
+        results.append(item)
+    return results
+
+
+def verify(car_root):
+    results = dependency_report(car_root)
+    for item in results:
         print(
-            "Environment verification failed: " + ", ".join(failures), file=sys.stderr
+            f"{item['status'].upper()}: {item['requirement']} -> {item['module']}",
+            flush=True,
         )
+        if item.get("error"):
+            print(item["error"], file=sys.stderr, flush=True)
+    if any(item["status"] != "ok" for item in results):
+        print("Environment verification failed.", file=sys.stderr)
         return 1
     print("All configured dependencies and system imports verified.")
     return 0

@@ -44,6 +44,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.drivion.verification]
+# Total bound for the central runtime worker, including all dependency imports.
+evaluation_timeout_seconds = 900
 command_timeout_seconds = 180
 
 [tool.drivion.verification.imports]

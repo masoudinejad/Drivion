@@ -104,7 +104,7 @@ def test_manage_executable_enters_environment_from_another_directory(tmp_path):
     assert result.stdout.strip() == str(target)
 
 
-def test_startup_rejects_invalid_application_config_before_success(monkeypatch):
+def test_startup_publishes_and_displays_failures_before_rejecting_runtime(monkeypatch):
     import importlib.util
     from unittest.mock import Mock
 
@@ -117,15 +117,16 @@ def test_startup_rejects_invalid_application_config_before_success(monkeypatch):
     spec.loader.exec_module(launcher)
     banner = Mock()
     monkeypatch.setattr(launcher, "show_startup", banner)
-    from car.src import config
+    # The launcher imports system.* to support execution from outside car/.
+    from system.information import update
 
-    monkeypatch.setattr(
-        config, "load_config", Mock(side_effect=ValueError("invalid camera"))
-    )
-    with pytest.raises(ValueError, match="invalid camera"):
+    report = {"configuration": {"status": "error"}, "environment": {"status": "ok"}}
+    refresh = Mock(return_value=report)
+    monkeypatch.setattr(update, "refresh_info", refresh)
+    with pytest.raises(ValueError, match="configuration"):
         launcher.main()
-    banner.assert_not_called()
-    config.load_config.assert_called_once_with(source / "config.toml")
-    config.load_config.side_effect = None
+    refresh.assert_called_once_with(source)
+    banner.assert_called_once_with(report)
+    report["configuration"]["status"] = "ok"
     launcher.main()
-    banner.assert_called_once()
+    assert refresh.call_count == 2

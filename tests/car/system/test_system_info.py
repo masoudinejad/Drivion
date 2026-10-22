@@ -13,8 +13,23 @@ from car.system.network import fallback as wifi_fallback
 
 @pytest.fixture(autouse=True)
 def mock_discovery():
-    with patch.object(
-        system_info, "discover", return_value={"status": "ok", "ports": []}
+    with (
+        patch.object(
+            system_info, "discover", return_value={"status": "ok", "ports": []}
+        ),
+        patch.object(
+            system_info,
+            "runtime_info",
+            return_value={
+                "configuration": {"status": "ok"},
+                "environment": {"status": "ok"},
+                "camera": {
+                    "status": "ok",
+                    "devices": [{"id": "/base/camera", "model": "imx219", "index": 0}],
+                },
+                "joystick": {"status": "unconfigured", "devices": []},
+            },
+        ),
     ):
         yield
 

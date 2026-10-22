@@ -110,6 +110,7 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path, initialize):
         tmp_path / "config.defaults.toml"
     ).stat().st_ino
     assert info["hardware"] == {
+        "status": "ok",
         "model": "Raspberry Pi Test",
         "serial_number": "00000000a4f29c",
     }

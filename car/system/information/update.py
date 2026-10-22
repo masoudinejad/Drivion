@@ -1,20 +1,27 @@
-"""Publish stable software and current Raspberry Pi system information."""
+"""Evaluate hardware and software together and publish one system snapshot."""
 
 import argparse
 import json
 import logging
 import os
 import platform
+import pwd
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import tomllib
 
 from ..arduino.device.discovery import compact_report, discover, retain_firmware_info
-from ..configuration import network_settings
+from ..configuration import (
+    execution_settings,
+    network_settings,
+    python_environment_settings,
+)
 
 INFO_PATH = Path("system/info.toml")
 
@@ -134,36 +141,181 @@ def existing_software(info_file):
     return software if isinstance(software, dict) else {}
 
 
+def runtime_info(car_root, config_root):
+    """Run user-managed Python only as the car directory's unprivileged owner."""
+    try:
+        settings = python_environment_settings(config_root)
+        with (Path(config_root) / "system/pyproject.toml").open("rb") as source:
+            timeout = tomllib.load(source)["tool"]["drivion"]["verification"][
+                "evaluation_timeout_seconds"
+            ]
+        if type(timeout) is not int or not 1 <= timeout <= 3600:
+            raise ValueError(
+                "Configure verification.evaluation_timeout_seconds between 1 and 3600"
+            )
+        python = Path(car_root) / settings.path / "bin/python"
+        if not python.is_file():
+            raise RuntimeError(
+                "Configured Python environment is missing; run provisioning"
+            )
+        thread_limit = str(execution_settings(config_root).numerical_thread_limit)
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV")
+        }
+        environment["PYTHONPATH"] = str(Path(car_root).resolve())
+        for name in (
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "TF_NUM_INTEROP_THREADS",
+            "TF_NUM_INTRAOP_THREADS",
+        ):
+            environment[name] = thread_limit
+        privileges = {}
+        if os.geteuid() == 0:
+            owner = pwd.getpwuid(Path(car_root).stat().st_uid)
+            if owner.pw_uid == 0:
+                raise RuntimeError("Runtime evaluation requires a non-root car owner")
+            privileges = {
+                "user": owner.pw_uid,
+                "group": owner.pw_gid,
+                "extra_groups": os.getgrouplist(owner.pw_name, owner.pw_gid),
+            }
+            environment.update(
+                HOME=owner.pw_dir, USER=owner.pw_name, LOGNAME=owner.pw_name
+            )
+        with subprocess.Popen(
+            [
+                str(python),
+                "-m",
+                "system.information.runtime",
+                str(Path(car_root).resolve()),
+            ],
+            cwd=car_root,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+            **privileges,
+        ) as process:
+            try:
+                output, errors = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+                raise RuntimeError(
+                    f"Runtime evaluation exceeded {timeout} seconds"
+                ) from None
+            if process.returncode:
+                raise RuntimeError(errors.strip() or "Runtime evaluation failed")
+        report = json.loads(output)
+        if not isinstance(report, dict):
+            raise ValueError("Invalid runtime evaluation report")
+        for name in ("configuration", "environment", "camera", "joystick"):
+            if not isinstance(report.get(name), dict) or "status" not in report[name]:
+                raise ValueError(f"Invalid runtime evaluation section: {name}")
+        return {
+            name: report[name]
+            for name in ("configuration", "environment", "camera", "joystick")
+        }
+    except (
+        ImportError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        KeyError,
+    ) as error:
+        return {
+            name: {"status": "error", "error": str(error)}
+            for name in ("configuration", "environment", "camera", "joystick")
+        }
+
+
 def collect_info(
     car_root,
     software=None,
     device_tree=Path("/proc/device-tree"),
     config_root=None,
 ):
+    """Evaluate hardware and software once, preserving deployment metadata only.
+
+    Device discovery never opens serial communication or starts camera capture.
+    Independent failures are recorded so a partial report is still publishable.
+    """
     car_root = Path(car_root)
     config_root = Path(config_root) if config_root is not None else car_root
-    settings = network_settings(config_root)
-    hardware = hardware_info(device_tree)
-    info_file = car_root / INFO_PATH
-    previous = existing_info(info_file)
-    return {
-        "software": (previous.get("software", {}) if software is None else software),
-        "hardware": hardware,
-        "arduino": retain_firmware_info(
-            compact_report(discover(car_root, config_root)), previous.get("arduino", {})
-        ),
+    previous = existing_info(car_root / INFO_PATH)
+    sections = {
+        "software": previous.get("software", {}) if software is None else software,
         "system": {
             "hostname": socket.gethostname(),
             "operating_system": _os_name(),
             "kernel": platform.release(),
             "architecture": platform.machine(),
         },
-        "network": {
-            "wifi_interface": settings.wifi_interface,
-            "fallback_ssid": settings.fallback_ssid(hardware["serial_number"]),
-            "fallback_address": settings.fallback_ipv4_address,
-        },
     }
+    try:
+        sections["hardware"] = {"status": "ok", **hardware_info(device_tree)}
+    except (OSError, RuntimeError, ValueError) as error:
+        sections["hardware"] = {"status": "error", "error": str(error)}
+    try:
+        sections["arduino"] = retain_firmware_info(
+            compact_report(discover(car_root, config_root)), previous.get("arduino", {})
+        )
+        if sections["arduino"]["status"] == "ok" and not (
+            sections["arduino"].get("address") or sections["arduino"].get("ports")
+        ):
+            sections["arduino"]["status"] = "missing"
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        sections["arduino"] = {"status": "error", "error": str(error)}
+    try:
+        settings = network_settings(config_root)
+        sections["network"] = {
+            "status": "ok",
+            "wifi_interface": settings.wifi_interface,
+            "fallback_ssid": settings.fallback_ssid(
+                sections["hardware"]["serial_number"]
+            ),
+            "fallback_address": settings.fallback_ipv4_address,
+        }
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
+        sections["network"] = {"status": "error", "error": str(error)}
+    sections.update(runtime_info(car_root, config_root))
+    failed = [
+        name
+        for name in (
+            "hardware",
+            "arduino",
+            "network",
+            "configuration",
+            "environment",
+            "camera",
+            "joystick",
+        )
+        if sections[name].get("status") != "ok"
+    ]
+    sections["checks"] = {
+        "status": (
+            "error"
+            if any(sections[name].get("status") == "error" for name in failed)
+            else "warning"
+            if failed
+            else "ok"
+        ),
+        "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "failed": failed,
+    }
+    return sections
+
+
+def refresh_info(car_root, **kwargs):
+    """Collect once and atomically publish the complete central snapshot."""
+    sections = collect_info(car_root, **kwargs)
+    publish(Path(car_root) / INFO_PATH, sections)
+    return sections
 
 
 def publish(info_file, sections):
@@ -226,13 +378,19 @@ def main(argv=None):
     try:
         software = software_from_text(sys.stdin.read()) if args.software_stdin else None
         config_root = args.config_root or args.car_root
-        settings = network_settings(config_root)
-        sections = collect_info(
-            args.car_root, software, args.device_tree, config_root=config_root
+        sections = refresh_info(
+            args.car_root,
+            software=software,
+            device_tree=args.device_tree,
+            config_root=config_root,
         )
-        content = publish(args.car_root / INFO_PATH, sections)
+        content = render_info(sections)
         if args.update_hotspot:
-            update_hotspot(settings, sections["network"]["fallback_ssid"])
+            if sections["network"]["status"] != "ok":
+                raise RuntimeError(sections["network"]["error"])
+            update_hotspot(
+                network_settings(config_root), sections["network"]["fallback_ssid"]
+            )
         if args.print_info:
             print(content, end="")
         return 0

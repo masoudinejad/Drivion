@@ -40,8 +40,8 @@ def _prepare_banner(styled=True):
     return ["DRIVION"]
 
 
-def show_startup():
-    """Show startup results, using plain text when output is redirected."""
+def show_startup(report=None):
+    """Display the central evaluation snapshot without probing hardware again."""
     interactive = sys.stdout.isatty() and os.environ.get("TERM") != "dumb"
     if interactive:
         print("\033[2J\033[H", end="", flush=True)
@@ -61,20 +61,33 @@ def show_startup():
     print()
     print(f"  {dim}{subtitle}{reset}")
     print()
-    print(f"  {green}{mark}{reset} Configuration loaded")
-    print(f"  {green}{mark}{reset} Python environment ready")
-    from car.src.camera.camera import camera_inventory
-
-    log = logging.getLogger(__name__)
-    try:
-        cameras = camera_inventory()
-        if not cameras:
-            raise RuntimeError("No cameras detected")
-        for index, camera in enumerate(cameras):
-            identity = f"model={camera.get('Model')} id={camera['Id']}"
-            log.info("Camera %d detected: %s", index, identity)
-            print(f"  {green}{mark}{reset} Camera {index} detected: {identity}")
-    except (ImportError, OSError, RuntimeError) as error:
-        log.warning("Camera detection failed: %s", error)
-        print(f"  [warning] Camera detection failed: {error}")
+    if report is None:
+        print(f"  {dim}System evaluation not run (display preview).{reset}")
+    else:
+        log = logging.getLogger(__name__)
+        for name in (
+            "configuration",
+            "environment",
+            "hardware",
+            "arduino",
+            "network",
+            "camera",
+            "joystick",
+        ):
+            result = report[name]
+            status = result["status"]
+            detail = result.get("error", "")
+            prefix = f"{green}{mark}{reset}" if status == "ok" else "[warning]"
+            message = f"{name.capitalize()}: {status}" + (
+                f" — {detail}" if detail else ""
+            )
+            print(f"  {prefix} {message}")
+            log.log(logging.INFO if status == "ok" else logging.WARNING, "%s", message)
+        for camera in report["camera"].get("devices", []):
+            identity = (
+                f"Camera {camera['index']}: model={camera['model']} id={camera['id']}"
+            )
+            print(f"  {dim}{identity}{reset}")
+            log.info("%s", identity)
+        print(f"  {dim}Evaluation saved to system/info.toml{reset}")
     print(f"\n  {dim}Driving functionality is not implemented yet.{reset}\n")

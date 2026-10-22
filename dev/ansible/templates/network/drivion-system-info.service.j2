@@ -5,6 +5,8 @@ Wants=NetworkManager.service
 
 [Service]
 Type=oneshot
+# Each discovery/import and the complete runtime evaluation have TOML bounds.
+TimeoutStartSec=infinity
 Environment=PYTHONPATH={{ service_library_directory }}
 ExecStart={{ service_python_executable }} -m system.information.update --car-root {{ car_root }} --config-root {{ service_configuration_directory }} --update-hotspot
 

@@ -1,30 +1,50 @@
-"""Verify startup camera discovery reports identities and failures accurately."""
+"""The startup screen renders the central report without probing devices."""
 
-import pytest
-
-from car.src.camera import camera
 from car.system.ui.startup import show_startup
 
 
-def test_startup_reports_camera_identity(monkeypatch, capsys, caplog):
-    monkeypatch.setattr(
-        camera, "camera_inventory", lambda: [{"Id": "/base/camera", "Model": "imx219"}]
-    )
+def report():
+    result = {
+        name: {"status": "ok"}
+        for name in (
+            "configuration",
+            "environment",
+            "hardware",
+            "arduino",
+            "network",
+            "joystick",
+        )
+    }
+    result["camera"] = {
+        "status": "ok",
+        "devices": [{"index": 0, "id": "/base/camera", "model": "imx219"}],
+    }
+    return result
+
+
+def test_startup_reports_central_snapshot(capsys, caplog):
     with caplog.at_level("INFO"):
-        show_startup()
-    assert "Camera 0 detected: model=imx219 id=/base/camera" in capsys.readouterr().out
+        show_startup(report())
+    output = capsys.readouterr().out
+    assert "Camera 0: model=imx219 id=/base/camera" in output
     assert "id=/base/camera" in caplog.text
+    assert "Configuration: ok" in output
+    assert "Environment: ok" in output
+    assert "Evaluation saved to system/info.toml" in output
 
 
-@pytest.mark.parametrize("failure", [None, ImportError("picamera2 unavailable")])
-def test_startup_reports_failed_detection(monkeypatch, capsys, failure):
-    def inventory():
-        if failure:
-            raise failure
-        return []
+def test_startup_reports_failed_evaluations(capsys):
+    snapshot = report()
+    snapshot["camera"] = {"status": "error", "error": "picamera2 unavailable"}
+    show_startup(snapshot)
+    output = capsys.readouterr().out
+    assert "[warning] Camera: error" in output
+    assert "picamera2 unavailable" in output
+    assert "Camera 0:" not in output
 
-    monkeypatch.setattr(camera, "camera_inventory", inventory)
+
+def test_display_preview_does_not_claim_checks_passed(capsys):
     show_startup()
     output = capsys.readouterr().out
-    assert "[warning] Camera detection failed:" in output
-    assert "Camera 0 detected" not in output
+    assert "evaluation not run" in output
+    assert "Configuration: ok" not in output
