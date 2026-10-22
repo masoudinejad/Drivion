@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from pathlib import Path
 
 import tomllib
@@ -25,6 +26,14 @@ else:
     import versioning
 TOOLS_DIR = Path(__file__).resolve().parent
 CAR_DIR = TOOLS_DIR.parents[1] / "car"
+
+
+@dataclass(frozen=True)
+class SyncOptions:
+    """Validated TOML snapshot shared by transfer and deployment publication."""
+
+    connect_timeout_seconds: int
+    excludes: tuple[str, ...]
 
 
 def tool_settings():
@@ -61,10 +70,7 @@ def tool_settings():
         )
         # Protect generated logs, not arbitrary source trees chosen as a log path.
         excludes.append(f"/{path.as_posix()}/*.log")
-    return timeout, tuple(excludes)
-
-
-SSH_CONNECT_TIMEOUT_SECONDS, EXCLUDES = tool_settings()
+    return SyncOptions(timeout, tuple(excludes))
 
 
 def car_service_python():
@@ -108,9 +114,8 @@ def read_settings(path):
     return settings
 
 
-def build_command(
-    settings, dry_run=False, password=False, source=None, *, replace_config=False
-):
+def remote_destination(settings):
+    """Validate shell-facing connection values and return the dedicated car path."""
     for key in ("PI_HOST", "PI_USER"):
         if not settings.get(key):
             raise ValueError(f"Set {key} in dev/sync/.env")
@@ -123,17 +128,43 @@ def build_command(
     destination = destination.rstrip("/")
     if destination != f"/home/{user}/car":
         raise ValueError("PI_CAR_PATH must be /home/<PI_USER>/car")
-    # The path and username are validated because SSH runs remote commands via a shell.
-    ssh = (
-        "ssh -o StrictHostKeyChecking=accept-new "
-        f"-o ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS} "
-        "-o NumberOfPasswordPrompts=1"
-    )
+    return destination
+
+
+def ssh_command(settings, *, password=False, options=None):
+    """Build shared SSH arguments without reverse-parsing an rsync command."""
+    options = tool_settings() if options is None else options
+    command = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        f"ConnectTimeout={options.connect_timeout_seconds}",
+        "-o",
+        "NumberOfPasswordPrompts=1",
+    ]
     if settings.get("SSH_AUTH_SOCK"):
-        ssh += " -o IdentityAgent=SSH_AUTH_SOCK"
+        command.extend(["-o", "IdentityAgent=SSH_AUTH_SOCK"])
     if settings.get("PI_SSH_PUBLIC_KEY") and not password:
         key = public_key_path(settings["PI_SSH_PUBLIC_KEY"])
-        ssh += " -o IdentitiesOnly=yes -i " + shlex.quote(str(key))
+        command.extend(["-o", "IdentitiesOnly=yes", "-i", str(key)])
+    return command
+
+
+def build_command(
+    settings,
+    dry_run=False,
+    password=False,
+    source=None,
+    *,
+    replace_config=False,
+    options=None,
+):
+    """Build a protected rsync transfer from one validated tool snapshot."""
+    destination = remote_destination(settings)
+    host, user = settings["PI_HOST"], settings["PI_USER"]
+    options = tool_settings() if options is None else options
+    ssh = shlex.join(ssh_command(settings, password=password, options=options))
     command = ["rsync", "-rlptz", "--checksum", "--delete", "--itemize-changes"]
     if not replace_config:
         # Hide the workstation config and protect the Pi copy from deletion.
@@ -142,7 +173,7 @@ def build_command(
         command = ["sshpass", "-e"] + command
     if dry_run:
         command.append("--dry-run")
-    for pattern in EXCLUDES:
+    for pattern in options.excludes:
         command.extend(["--exclude", pattern])
     command.extend(
         [
@@ -158,12 +189,21 @@ def build_command(
 
 
 def sync_versioned(
-    settings, environment, dry_run=False, password=False, *, replace_config=False
+    settings,
+    environment,
+    dry_run=False,
+    password=False,
+    *,
+    replace_config=False,
+    options=None,
 ):
+    """Freeze, transfer and publish using one operation's central tool settings."""
+    destination = remote_destination(settings)
+    options = tool_settings() if options is None else options
     record = versioning.git_version(CAR_DIR.parent)
     with tempfile.TemporaryDirectory(prefix="drivion-car-") as directory:
         snapshot = Path(directory) / "car"
-        versioning.snapshot_car(CAR_DIR, snapshot, EXCLUDES)
+        versioning.snapshot_car(CAR_DIR, snapshot, options.excludes)
         # Ship defaults separately; the active Pi configuration is runtime state.
         config = snapshot / "config.toml"
         if config.exists():
@@ -172,15 +212,19 @@ def sync_versioned(
                 config.unlink()
         record["checksum_sha256"] = versioning.snapshot_checksum(snapshot)
         command = build_command(
-            settings, dry_run, password, snapshot, replace_config=replace_config
+            settings,
+            dry_run,
+            password,
+            snapshot,
+            replace_config=replace_config,
+            options=options,
         )
         result = subprocess.run(command, env=environment, check=False)
         if result.returncode or dry_run:
             return result.returncode
         record["deployed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         content = versioning.software_toml(record)
-        ssh = shlex.split(command[command.index("--rsync-path") - 1])
-        destination = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
+        ssh = ssh_command(settings, password=password, options=options)
         ssh.extend(
             [
                 f"{settings['PI_USER']}@{settings['PI_HOST']}",
@@ -225,12 +269,14 @@ def public_key_path(value):
 
 
 def build_key_command(settings, public_key=None):
+    remote_destination(settings)
+    options = tool_settings()
     command = [
         "ssh-copy-id",
         "-o",
         "StrictHostKeyChecking=accept-new",
         "-o",
-        f"ConnectTimeout={SSH_CONNECT_TIMEOUT_SECONDS}",
+        f"ConnectTimeout={options.connect_timeout_seconds}",
     ]
     public_key = public_key or settings.get("PI_SSH_PUBLIC_KEY")
     if public_key:
@@ -277,7 +323,7 @@ def main(argv=None):
         parser.error("--dry-run cannot be combined with --setup-ssh-key")
     try:
         settings = read_settings(TOOLS_DIR / ".env")
-        command = build_command(settings, args.dry_run, args.password)
+        remote_destination(settings)
         use_password = args.password or (
             args.setup_ssh_key and bool(settings.get("PI_PASSWORD"))
         )
@@ -331,7 +377,13 @@ def main(argv=None):
             file=sys.stderr,
         )
         return 1
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        OSError,
+        subprocess.CalledProcessError,
+    ) as error:
         print(f"Sync error: {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:

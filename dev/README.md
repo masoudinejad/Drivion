@@ -11,6 +11,9 @@ Development and debugging utilities live here, with independent uv dependencies.
 Non-secret tool behavior, including sync exclusions, SSH timeouts, and formatted
 file extensions, is configured under `tool.drivion` in `dev/pyproject.toml`.
 Machine addresses and secrets remain in the ignored `sync/.env` file.
+Sync reads and validates TOML settings when an operation starts, then reuses that
+snapshot for the transfer and deployment record. Importing the development tools
+and requesting CLI help do not read project configuration files.
 
 ## Sync the car code to a Raspberry Pi
 

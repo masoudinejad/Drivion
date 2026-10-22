@@ -44,8 +44,8 @@ def hotspot_password(settings):
 
 def build_inventory(settings):
     # Reuse sync's validation and SSH options, including the selected agent key.
-    command = sync_car.build_command(settings)
-    ssh = shlex.split(command[command.index("--rsync-path") - 1])
+    car_root = sync_car.remote_destination(settings)
+    ssh = sync_car.ssh_command(settings)
     relative_environment = environment_path(ROOT / "car").relative_to(ROOT / "car")
     network = network_settings(ROOT / "car")
     uv = uv_settings(ROOT / "car")
@@ -60,7 +60,6 @@ def build_inventory(settings):
             "Arduino service_config_path must be inside the service configuration directory"
         )
     packages, _ = system_settings(ROOT / "car")
-    car_root = settings.get("PI_CAR_PATH") or f"/home/{settings['PI_USER']}/car"
     car_home = f"/home/{settings['PI_USER']}"
     return {
         "all": {

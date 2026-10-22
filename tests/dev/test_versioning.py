@@ -11,6 +11,11 @@ import tomllib
 from dev.sync import sync_car, versioning
 
 
+@pytest.fixture
+def sync_options():
+    return sync_car.tool_settings()
+
+
 def test_snapshot_excludes_generated_files_and_freezes_content(tmp_path):
     source = tmp_path / "source"
     (source / "system/.venv").mkdir(parents=True)
@@ -21,7 +26,7 @@ def test_snapshot_excludes_generated_files_and_freezes_content(tmp_path):
     (source / ".env").write_text("secret")
     (source / "drive.py").write_text("original")
     snapshot = tmp_path / "snapshot"
-    versioning.snapshot_car(source, snapshot, sync_car.EXCLUDES)
+    versioning.snapshot_car(source, snapshot, sync_car.tool_settings().excludes)
     checksum = versioning.snapshot_checksum(snapshot)
     (source / "drive.py").write_text("changed")
     assert (snapshot / "drive.py").read_text() == "original"
@@ -98,7 +103,7 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path, initialize):
     }
 
 
-def test_failed_sync_and_dry_run_do_not_publish(tmp_path):
+def test_failed_sync_and_dry_run_do_not_publish(tmp_path, sync_options):
     car = tmp_path / "car"
     (car / "system").mkdir(parents=True)
     (car / "system/info.toml").write_text("last deployment")
@@ -115,12 +120,15 @@ def test_failed_sync_and_dry_run_do_not_publish(tmp_path):
                 return_value=subprocess.CompletedProcess([], status),
             ) as run,
         ):
-            assert sync_car.sync_versioned(settings, {}, dry_run) == status
+            assert (
+                sync_car.sync_versioned(settings, {}, dry_run, options=sync_options)
+                == status
+            )
             assert run.call_count == 1
         assert (car / "system/info.toml").read_text() == "last deployment"
 
 
-def test_success_publishes_and_caches_record(tmp_path):
+def test_success_publishes_and_caches_record(tmp_path, sync_options):
     car = tmp_path / "car"
     (car / "system").mkdir(parents=True)
     (car / "drive.py").write_text("code")
@@ -137,7 +145,7 @@ def test_success_publishes_and_caches_record(tmp_path):
             subprocess.CompletedProcess([], 0),
             subprocess.CompletedProcess([], 0, stdout="[software]\nversion='abc'\n"),
         ]
-        assert sync_car.sync_versioned(settings, {}) == 0
+        assert sync_car.sync_versioned(settings, {}, options=sync_options) == 0
         assert run.call_count == 2
         sent = tomllib.loads(run.call_args.kwargs["input"])["software"]
     local = tomllib.loads((car / "system/info.toml").read_text())["software"]

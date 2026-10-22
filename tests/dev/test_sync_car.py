@@ -1,9 +1,11 @@
 """Checks for destination protection and rsync mirror behavior."""
 
 import shutil
+import shlex
 import subprocess
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,6 +48,7 @@ class SyncTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("rsync"), "rsync is required")
     def test_mirror_preserves_environment_and_home(self):
+        options = sync_car.tool_settings()
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             source, home = root / "source", root / "home"
@@ -70,7 +73,7 @@ class SyncTests(unittest.TestCase):
                 generated.mkdir(parents=True)
                 (generated / "marker").write_text("keep")
             with patch.object(sync_car, "CAR_DIR", source):
-                command = sync_car.build_command(self.settings)
+                command = sync_car.build_command(self.settings, options=options)
             # Exercise the exact transfer flags and exclusions against a local destination.
             transfer = command[: command.index("-e")]
             subprocess.run(
@@ -106,6 +109,36 @@ class SyncTests(unittest.TestCase):
                 self.assertEqual(
                     (target / "system/arduino" / name / "marker").read_text(), "keep"
                 )
+
+    def test_ssh_arguments_preserve_public_key_paths_with_spaces(self):
+        with tempfile.TemporaryDirectory() as folder:
+            public = Path(folder) / "controller identity.pub"
+            public.write_text("ssh-ed25519 example")
+            settings = dict(self.settings, PI_SSH_PUBLIC_KEY=str(public))
+            command = sync_car.build_command(settings)
+            ssh = sync_car.ssh_command(settings)
+            self.assertEqual(shlex.split(command[command.index("-e") + 1]), ssh)
+            self.assertEqual(ssh[-1], str(public.resolve()))
+            self.assertNotIn("-i", sync_car.ssh_command(settings, password=True))
+
+    def test_import_needs_no_configuration_files(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from unittest.mock import patch; "
+                    "from pathlib import Path; "
+                    "guard = patch.object(Path, 'open', side_effect=AssertionError('configuration read at import')); "
+                    "guard.start(); import dev.sync.sync_car; import dev.ansible.run"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path(sync_car.__file__).resolve().parents[2],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
