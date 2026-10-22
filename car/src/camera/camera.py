@@ -167,8 +167,11 @@ class Camera:
         shape = (self.config.height, self.config.width)
         if self.config.channels == "rgb":
             shape += (3,)
-        result = np.zeros(shape, dtype=np.uint8)
-        result[top : top + height, left : left + width] = frame
+        if frame.shape == shape:
+            result = frame.copy()
+        else:
+            result = np.zeros(shape, dtype=np.uint8)
+            result[top : top + height, left : left + width] = frame
         self.current_img = result
         self.capture_count += 1
         return result

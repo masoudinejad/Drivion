@@ -104,6 +104,8 @@ RGB capture uses Picamera2's `BGR888` format, which yields RGB arrays in memory.
 Y capture extracts only luminance, excluding chroma and row padding.
 Each returned frame owns its memory. `current_img` refers to the latest returned
 frame, and `capture_count` counts successful captures.
+Capture copies directly when the stream already fills the output dimensions;
+zero-filled padding is allocated only when the aspect ratios require it.
 
 Automatic exposure is enabled with equal minimum and maximum frame durations.
 Four buffers are used internally, with cached-frame queuing disabled. Capture

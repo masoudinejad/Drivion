@@ -107,6 +107,19 @@ def test_y_capture_removes_chroma_stride_and_pads_without_cropping(device):
         assert not np.shares_memory(frame, device.array)
 
 
+@pytest.mark.parametrize("channels", ["rgb", "y"])
+def test_matching_aspect_ratio_returns_an_owned_contiguous_frame(device, channels):
+    config = camera_config(sensor_width=640, sensor_height=480, channels=channels)
+    with module.Camera(config) as camera:
+        frame = camera.single_capture()
+        original = frame.copy()
+        assert frame.shape == ((480, 640, 3) if channels == "rgb" else (480, 640))
+        assert frame.flags.c_contiguous
+        assert not np.shares_memory(frame, device.array)
+        device.array[:] = 0
+        np.testing.assert_array_equal(frame, original)
+
+
 def test_configured_sensor_dimensions_are_used(device):
     with module.Camera(camera_config(sensor_width=3280, sensor_height=2464)):
         assert device.requested["sensor"] == {"output_size": (3280, 2464)}
