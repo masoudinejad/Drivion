@@ -56,38 +56,9 @@ void onEvent(void *, Event event, const Target &target) {
     steering.center();
   // No steering sensor: do not claim that the demanded angle was measured.
 }
-// Preserve existing INFO management queries before entering a binary session.
-char command[sizeof(DRIVION_INFO_COMMAND)]{};
-size_t commandLength = 0;
-bool discardCommand = false;
+// Preserve INFO queries until the first binary frame starts.
+drivion::ManagementCommands<sizeof(DRIVION_INFO_COMMAND)> management;
 bool binaryMode = false;
-void pollManagement() {
-  for (uint16_t budget = RX_BUDGET_BYTES; budget && Serial.available();
-       --budget) {
-    // The delimiter switches parsers without consuming the binary frame start.
-    if (Serial.peek() == Flag) {
-      binaryMode = true;
-      return;
-    }
-    const int incoming = Serial.read();
-    if (incoming < 0)
-      return;
-    if (incoming == '\n') {
-      if (!discardCommand) {
-        command[commandLength] = '\0';
-        drivion::handleInfo(Serial, command, DRIVION_INFO_COMMAND,
-                            F(DRIVION_INFO_RESPONSE));
-      }
-      commandLength = 0;
-      discardCommand = false;
-    } else if (incoming != '\r' && !discardCommand) {
-      if (commandLength + 1 < sizeof(command))
-        command[commandLength++] = char(incoming);
-      else
-        discardCommand = true;
-    }
-  }
-}
 } // namespace
 
 void setup() {
@@ -99,7 +70,9 @@ void setup() {
 }
 void loop() {
   if (!binaryMode)
-    pollManagement();
+    binaryMode =
+        management.poll(Serial, DRIVION_INFO_COMMAND, F(DRIVION_INFO_RESPONSE),
+                        RX_BUDGET_BYTES, Flag);
   if (binaryMode)
     communication.poll(millis());
   if (calibrationSession.latched()) {

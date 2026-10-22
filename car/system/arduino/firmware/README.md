@@ -90,7 +90,14 @@ Failed or empty builds do not receive a valid manifest.
 
 ## Required sketch integration
 
-Each sketch must initialize serial using `DRIVION_SERIAL_BAUD_RATE` and pass a
+The bundled sketches use `drivion::ManagementCommands<Capacity>` from
+`DrivionFirmware.h` to handle INFO lines with a bounded byte budget per loop.
+The buffer capacity includes the terminating NUL. Overlong lines are discarded
+in full. Communication sketches supply the binary frame delimiter; the reader
+leaves it unconsumed and returns `true` so the sketch can switch parsers.
+
+Each sketch must initialize serial using `DRIVION_SERIAL_BAUD_RATE`. Custom
+command dispatchers can pass a
 complete, null-terminated command (without newline/CR) from its existing serial
 command dispatcher to the shared `drivion::handleInfo` library helper:
 
@@ -113,7 +120,8 @@ void dispatchCommand(const char *command) {
 ```
 
 The sketch's loop/parser must call this dispatcher whenever it receives a full
-line. The helper does not consume serial bytes itself, so it cannot compete with
+line. The `handleInfo` helper does not consume serial bytes itself, so it cannot
+compete with
 the motor-control parser. It replies with one JSON line containing the generated
 firmware name, version, protocol version, Git commit and source-dirty flag.
 The registered `board_setup_test` firmware implements this contract and blinks

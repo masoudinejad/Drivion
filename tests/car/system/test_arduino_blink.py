@@ -62,6 +62,7 @@ struct SerialStub {
   unsigned long baud = 0;
   void begin(unsigned long value) { baud = value; }
   int available() { return input.size(); }
+  int peek() { return input.empty() ? -1 : static_cast<unsigned char>(input.front()); }
   int read() {
     if (input.empty()) return -1;
     const unsigned char value = input.front();

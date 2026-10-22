@@ -11,36 +11,7 @@ static_assert(BLINK_DURATION_MS > 0 && BLINK_DURATION_MS == blinkDuration,
 unsigned long lastToggle = 0;
 bool ledOn = false;
 // The only supported command is the configured identity token, plus its NUL.
-char command[sizeof(DRIVION_INFO_COMMAND)];
-size_t commandLength = 0;
-bool discardCommand = false;
-
-void readIdentityCommands() {
-  // Bound work per loop so serial noise cannot starve the blink timer.
-  for (size_t remaining = sizeof(command);
-       remaining > 0 && Serial.available() > 0; --remaining) {
-    const int incoming = Serial.read();
-    if (incoming < 0) {
-      break;
-    }
-    if (incoming == '\n') {
-      if (!discardCommand) {
-        command[commandLength] = '\0';
-        drivion::handleInfo(Serial, command, DRIVION_INFO_COMMAND,
-                            F(DRIVION_INFO_RESPONSE));
-      }
-      commandLength = 0;
-      discardCommand = false;
-    } else if (incoming != '\r' && !discardCommand) {
-      if (commandLength + 1 < sizeof(command)) {
-        command[commandLength++] = static_cast<char>(incoming);
-      } else {
-        // Reject the whole overlong line, never interpret its trailing bytes.
-        discardCommand = true;
-      }
-    }
-  }
-}
+drivion::ManagementCommands<sizeof(DRIVION_INFO_COMMAND)> management;
 } // namespace
 
 void setup() {
@@ -58,5 +29,6 @@ void loop() {
     ledOn = !ledOn;
     digitalWrite(LED_BUILTIN, ledOn ? HIGH : LOW);
   }
-  readIdentityCommands();
+  management.poll(Serial, DRIVION_INFO_COMMAND, F(DRIVION_INFO_RESPONSE),
+                  sizeof(DRIVION_INFO_COMMAND));
 }
