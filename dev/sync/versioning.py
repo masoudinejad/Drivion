@@ -30,18 +30,26 @@ def snapshot_car(source, destination, excludes):
 
 
 def snapshot_checksum(root):
-    """Hash sorted paths, contents/link targets, and executable permission bits."""
+    """Hash snapshot identity, streaming file contents with bounded memory."""
     digest = hashlib.sha256()
     for path in sorted(Path(root).rglob("*")):
         if not path.is_symlink() and not path.is_file():
             continue
         name = path.relative_to(root).as_posix().encode()
-        content = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
         kind = b"link" if path.is_symlink() else b"file"
         mode = b"" if path.is_symlink() else str(path.stat().st_mode & 0o111).encode()
-        for value in (name, kind, mode, content):
+        for value in (name, kind, mode):
             digest.update(len(value).to_bytes(8, "big"))
             digest.update(value)
+        if path.is_symlink():
+            content = os.readlink(path).encode()
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+        else:
+            with path.open("rb") as stream:
+                digest.update(os.fstat(stream.fileno()).st_size.to_bytes(8, "big"))
+                # Continue the same digest to preserve existing deployment checksums.
+                hashlib.file_digest(stream, lambda: digest)
     return digest.hexdigest()
 
 

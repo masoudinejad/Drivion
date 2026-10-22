@@ -39,6 +39,18 @@ def test_snapshot_excludes_generated_files_and_freezes_content(tmp_path):
     assert versioning.snapshot_checksum(snapshot) != checksum
 
 
+def test_streamed_checksum_preserves_existing_snapshot_format(tmp_path):
+    """Retain the published digest contract for files, links and executable bits."""
+    (tmp_path / "empty").touch()
+    (tmp_path / "empty").chmod(0o755)
+    (tmp_path / "frame.bin").write_bytes(b"Drivion\x00\xff" * 50000)
+    (tmp_path / "frame.bin").chmod(0o644)
+    (tmp_path / "frame.link").symlink_to("frame.bin")
+    assert versioning.snapshot_checksum(tmp_path) == (
+        "5e0e9707c1fc4ab95726c611e647a2a7bf6a4130ba8bf7a47d6335559652b23e"
+    )
+
+
 def test_git_release_and_dirty_state(tmp_path):
     def git(*args):
         subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
