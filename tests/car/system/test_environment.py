@@ -104,7 +104,7 @@ def test_manage_executable_enters_environment_from_another_directory(tmp_path):
     assert result.stdout.strip() == str(target)
 
 
-def test_startup_publishes_and_displays_failures_before_rejecting_runtime(monkeypatch):
+def test_driving_start_reads_saved_report_without_running_checks(monkeypatch):
     import importlib.util
     from unittest.mock import Mock
 
@@ -115,18 +115,24 @@ def test_startup_publishes_and_displays_failures_before_rejecting_runtime(monkey
     )
     launcher = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(launcher)
+    from system.information import update
+    from car.src import config
+
+    report = {"checks": {"checked_at": "old", "status": "error"}}
+    read = Mock(return_value=report)
+    refresh = Mock(side_effect=AssertionError("Driving must not evaluate hardware"))
+    validate = Mock()
+    monkeypatch.setattr(update, "existing_info", read)
+    monkeypatch.setattr(update, "refresh_info", refresh)
+    monkeypatch.setattr(config, "load_config", validate)
     banner = Mock()
     monkeypatch.setattr(launcher, "show_startup", banner)
-    # The launcher imports system.* to support execution from outside car/.
-    from system.information import update
-
-    report = {"configuration": {"status": "error"}, "environment": {"status": "ok"}}
-    refresh = Mock(return_value=report)
-    monkeypatch.setattr(update, "refresh_info", refresh)
-    with pytest.raises(ValueError, match="configuration"):
-        launcher.main()
-    refresh.assert_called_once_with(source)
-    banner.assert_called_once_with(report)
-    report["configuration"]["status"] = "ok"
     launcher.main()
-    assert refresh.call_count == 2
+    validate.assert_called_once_with(source / "config.toml")
+    read.assert_called_once_with(source / "system/info.toml")
+    banner.assert_called_once_with(report)
+    refresh.assert_not_called()
+    validate.side_effect = ValueError("invalid config")
+    with pytest.raises(ValueError, match="invalid config"):
+        launcher.main()
+    assert banner.call_count == 1

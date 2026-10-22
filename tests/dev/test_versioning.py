@@ -71,7 +71,7 @@ def test_git_release_and_dirty_state(tmp_path):
 
 
 @pytest.mark.parametrize("initialize", [False, True])
-def test_publish_is_atomic_and_collects_system_info(tmp_path, initialize):
+def test_publish_is_atomic_and_preserves_boot_system_info(tmp_path, initialize):
     (tmp_path / "system").mkdir()
     source = Path(versioning.__file__).parents[2] / "car"
     shutil.copy(source / "config.toml", tmp_path / "config.defaults.toml")
@@ -86,16 +86,16 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path, initialize):
     shutil.copy(source / "system/pyproject.toml", tmp_path / "system/pyproject.toml")
     shutil.copytree(source / "system/information", tmp_path / "system/information")
     shutil.copytree(source / "system/arduino", tmp_path / "system/arduino")
-    device_tree = tmp_path / "device-tree"
-    device_tree.mkdir()
-    (device_tree / "model").write_bytes(b"Raspberry Pi Test\0")
-    (device_tree / "serial-number").write_bytes(b"00000000a4f29c\0")
+    saved = {
+        "checks": {"checked_at": "boot-time", "evaluated_commit": "older"},
+        "camera": {"status": "ok", "devices": [{"id": "/base/camera"}]},
+    }
+    from car.system.information.update import render_info
+
+    (tmp_path / "system/info.toml").write_text(render_info(saved))
     record = {"version": "v0.1.0", "commit": "abc", "dirty": True}
     content = versioning.software_toml(record)
-    script = versioning.PUBLISH_SCRIPT.replace(
-        '"--software-stdin", "--print"',
-        f'"--software-stdin", "--device-tree", {str(device_tree)!r}, "--print"',
-    )
+    script = versioning.PUBLISH_SCRIPT
     subprocess.run(
         ["python3", "-c", script, str(tmp_path)],
         input=content,
@@ -109,11 +109,9 @@ def test_publish_is_atomic_and_collects_system_info(tmp_path, initialize):
     assert (tmp_path / "config.toml").stat().st_ino != (
         tmp_path / "config.defaults.toml"
     ).stat().st_ino
-    assert info["hardware"] == {
-        "status": "ok",
-        "model": "Raspberry Pi Test",
-        "serial_number": "00000000a4f29c",
-    }
+    assert info["checks"] == saved["checks"]
+    assert info["camera"] == saved["camera"]
+    assert "environment" not in info
 
 
 def test_failed_sync_and_dry_run_do_not_publish(tmp_path, sync_options):

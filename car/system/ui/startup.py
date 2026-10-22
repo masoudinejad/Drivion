@@ -62,9 +62,11 @@ def show_startup(report=None):
     print(f"  {dim}{subtitle}{reset}")
     print()
     if report is None:
-        print(f"  {dim}System evaluation not run (display preview).{reset}")
+        print(f"  {dim}No saved system evaluation available.{reset}")
     else:
         log = logging.getLogger(__name__)
+        checked_at = report.get("checks", {}).get("checked_at", "unknown")
+        print(f"  {dim}Last system evaluation: {checked_at}{reset}")
         for name in (
             "configuration",
             "environment",
@@ -74,8 +76,8 @@ def show_startup(report=None):
             "camera",
             "joystick",
         ):
-            result = report[name]
-            status = result["status"]
+            result = report.get(name, {})
+            status = result.get("status", "unknown")
             detail = result.get("error", "")
             prefix = f"{green}{mark}{reset}" if status == "ok" else "[warning]"
             message = f"{name.capitalize()}: {status}" + (
@@ -83,11 +85,11 @@ def show_startup(report=None):
             )
             print(f"  {prefix} {message}")
             log.log(logging.INFO if status == "ok" else logging.WARNING, "%s", message)
-        for camera in report["camera"].get("devices", []):
+        for camera in report.get("camera", {}).get("devices", []):
             identity = (
                 f"Camera {camera['index']}: model={camera['model']} id={camera['id']}"
             )
             print(f"  {dim}{identity}{reset}")
             log.info("%s", identity)
-        print(f"  {dim}Evaluation saved to system/info.toml{reset}")
+        print(f"  {dim}Saved results from system/info.toml (no new checks run){reset}")
     print(f"\n  {dim}Driving functionality is not implemented yet.{reset}\n")

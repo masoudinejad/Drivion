@@ -22,16 +22,20 @@ validates and installs the new state.
 
 ## Central hardware and software evaluation
 
-`information.update.refresh_info()` runs the initial evaluations together and
-atomically writes `system/info.toml`. The same collector runs at Pi boot, after
-code sync, and when `drive.py` starts. The startup screen displays that completed
-snapshot rather than repeating individual checks. Provisioning runs the same
-entry point after installing dependencies; its package consistency check remains
-an installation-specific check.
+`information.update.refresh_info()` runs the initial evaluations together at
+**Pi boot** and atomically writes `system/info.toml`. It also supports explicit
+manual checks and post-installation verification. `drive.py` only enters the
+configured Python environment, validates the live configuration, and displays
+the last saved report; it never runs the full evaluation or changes its timestamp.
+Code sync only updates deployment metadata while preserving the last evaluation.
+Provisioning explicitly runs the central check after installing dependencies;
+its package consistency check remains an installation-specific check.
 
 The generated snapshot contains:
 
-- `checks`: overall status, UTC evaluation time, and sections requiring attention.
+- `checks`: overall status, UTC evaluation time, evaluated deployment commit, and
+  sections requiring attention. Compare `evaluated_commit` with `software.commit`
+  to see whether the latest code has been evaluated.
 - `software`: deployed version, commit, dirty flag, checksum, and deployment time.
   These are preserved deployment records, not a fresh integrity verification.
 - `configuration`: validation of the complete application configuration.
@@ -52,11 +56,13 @@ The generated snapshot contains:
 Each evaluated section has a status. Missing devices, invalid configuration,
 missing environments, failed imports, and discovery failures are saved in the
 new snapshot instead of leaving stale identities or aborting unrelated checks.
-Startup displays warnings for device failures and exits unsuccessfully for
-configuration or environment failures, after publishing their results. The
-information-update CLI returns success when the snapshot was published; inspect
+The driving screen labels these as saved results and displays their timestamp;
+it does not use old results to reject the current runtime. The launcher still
+rejects an invalid live configuration or missing Python environment immediately.
+The information-update CLI returns success when the snapshot was published; inspect
 `checks.status` and per-section statuses for readiness. Hotspot-update errors
-still produce an unsuccessful exit.
+still produce an unsuccessful exit. `--require-runtime`, used by provisioning,
+also exits unsuccessfully for configuration or environment evaluation failures.
 
 Dependency imports run in isolated subprocesses using the configured environment.
 The root boot collector drops to the car directory owner's UID, GID and group

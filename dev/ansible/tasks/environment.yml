@@ -92,9 +92,14 @@
           - "{{ car_environment_path }}/bin/python"
       changed_when: false
 
-    - name: Run central hardware and software evaluation through the car entry point
+    - name: Run central hardware and software evaluation after installation
       ansible.builtin.command:
         argv:
-          - "{{ car_root }}/drive.py"
-        chdir: "{{ temporary_directory }}"
+          - "{{ car_environment_path }}/bin/python"
+          - -m
+          - system.information.update
+          - --car-root
+          - "{{ car_root }}"
+          - --require-runtime
+        chdir: "{{ car_root }}"
       changed_when: false

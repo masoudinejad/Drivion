@@ -30,7 +30,7 @@ def test_startup_reports_central_snapshot(capsys, caplog):
     assert "id=/base/camera" in caplog.text
     assert "Configuration: ok" in output
     assert "Environment: ok" in output
-    assert "Evaluation saved to system/info.toml" in output
+    assert "Saved results from system/info.toml" in output
 
 
 def test_startup_reports_failed_evaluations(capsys):
@@ -46,5 +46,5 @@ def test_startup_reports_failed_evaluations(capsys):
 def test_display_preview_does_not_claim_checks_passed(capsys):
     show_startup()
     output = capsys.readouterr().out
-    assert "evaluation not run" in output
+    assert "No saved system evaluation available" in output
     assert "Configuration: ok" not in output

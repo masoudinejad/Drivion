@@ -181,7 +181,7 @@ def test_update_cli_publishes_one_snapshot(root, capsys):
     worker.assert_called_once()
 
 
-def test_launcher_publishes_missing_environment_before_exiting(root):
+def test_launcher_missing_environment_does_not_change_boot_report(root):
     import shutil
     import subprocess
 
@@ -195,6 +195,9 @@ def test_launcher_publishes_missing_environment_before_exiting(root):
             root / "system" / name,
             ignore=shutil.ignore_patterns("__pycache__"),
         )
+    path = root / update.INFO_PATH
+    original = '[checks]\nstatus="ok"\nchecked_at="boot-time"\n'
+    path.write_text(original)
     result = subprocess.run(
         [sys.executable, str(root / "drive.py")],
         capture_output=True,
@@ -202,7 +205,26 @@ def test_launcher_publishes_missing_environment_before_exiting(root):
         timeout=10,
     )
     assert result.returncode == 1
-    stored = tomllib.loads((root / update.INFO_PATH).read_text())
-    assert stored["environment"]["status"] == "error"
-    assert "environment is missing" in stored["environment"]["error"]
-    assert "Evaluation saved to system/info.toml" in result.stdout
+    assert path.read_text() == original
+    assert "environment is missing" in result.stderr
+
+
+def test_deployment_update_preserves_results_and_does_not_probe(root):
+    original = {
+        "checks": {"checked_at": "boot-time", "evaluated_commit": "old"},
+        "camera": {"status": "ok", "devices": [{"id": "/base/camera"}]},
+    }
+    update.publish(root / update.INFO_PATH, original)
+    with patch.object(
+        update, "collect_info", side_effect=AssertionError("No sync probes")
+    ):
+        result = update.publish_deployment(root, {"commit": "new"})
+    assert result == {**original, "software": {"commit": "new"}}
+    assert tomllib.loads((root / update.INFO_PATH).read_text()) == result
+
+
+def test_explicit_evaluation_can_fail_provisioning_after_saving_report(root):
+    report = {"configuration": {"status": "ok"}, "environment": {"status": "error"}}
+    with patch.object(update, "refresh_info", return_value=report) as refresh:
+        assert update.main(["--car-root", str(root), "--require-runtime"]) == 1
+    refresh.assert_called_once()

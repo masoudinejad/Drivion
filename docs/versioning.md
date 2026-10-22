@@ -6,7 +6,8 @@ features, and PATCH for fixes. Tags are created explicitly when a release is
 ready; syncing does not create commits or tags.
 
 Every successful car sync publishes `car/system/info.toml` on the Pi and caches
-the resulting record locally. A boot service refreshes the Pi copy's hardware
+the resulting record locally. Sync updates only `software`, preserving the last
+evaluation and its timestamp. A boot service refreshes the Pi copy's hardware
 and system sections, so moving the SD card to another Pi is detected
 automatically. The file is generated metadata and ignored by Git. User settings
 remain in `car/config.toml`.
@@ -47,7 +48,10 @@ are excluded. Rsync checks file contents and transfers that frozen snapshot.
 The record is atomically published after a successful transfer. Dry runs and
 SSH key setup do not update it. On every boot, the same atomic publisher keeps
 the software section and refreshes the other sections from the running Pi. The
-Pi needs Python 3 for publishing the record.
+Pi needs Python 3 for publishing the record. Full dependency and device checks
+run at boot or on explicit request, never on sync or driving start. The
+`checks.evaluated_commit` field identifies the deployment present during the last
+evaluation; it can differ from `software.commit` after a later sync.
 
 File transfer itself is not atomic: an interrupted transfer can leave partially
 updated code, while the previous version record remains. A successful record

@@ -67,7 +67,9 @@ Runtime data folders should be added to the exclusions as features define them.
 
 The Pi also needs Python 3 to publish the generated `system/info.toml` record
 after a successful transfer. The record combines deployment data with current
-hardware and system information. Sync uses a frozen local snapshot and content
+hardware and system information collected at boot. Sync updates only deployment
+metadata and preserves the evaluation timestamp and device records; it does not
+rerun hardware or dependency checks. Sync uses a frozen local snapshot and content
 checksums. Dry runs and key setup do not publish a record. See
 [version tracking](../docs/versioning.md) for release tags and record fields.
 

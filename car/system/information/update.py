@@ -306,6 +306,7 @@ def collect_info(
             else "ok"
         ),
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "evaluated_commit": sections["software"].get("commit", "unknown"),
         "failed": failed,
     }
     return sections
@@ -315,6 +316,15 @@ def refresh_info(car_root, **kwargs):
     """Collect once and atomically publish the complete central snapshot."""
     sections = collect_info(car_root, **kwargs)
     publish(Path(car_root) / INFO_PATH, sections)
+    return sections
+
+
+def publish_deployment(car_root, software):
+    """Update deployment metadata without rerunning or relabelling boot checks."""
+    path = Path(car_root) / INFO_PATH
+    sections = existing_info(path)
+    sections["software"] = software
+    publish(path, sections)
     return sections
 
 
@@ -371,19 +381,38 @@ def main(argv=None):
         help="Root containing protected config.toml and system/pyproject.toml",
     )
     parser.add_argument("--software-stdin", action="store_true")
+    parser.add_argument(
+        "--deployment-only",
+        action="store_true",
+        help="Update only deployment metadata, preserving boot results",
+    )
+    parser.add_argument(
+        "--require-runtime",
+        action="store_true",
+        help="Return failure for configuration or environment errors",
+    )
     parser.add_argument("--device-tree", type=Path, default=Path("/proc/device-tree"))
     parser.add_argument("--update-hotspot", action="store_true")
     parser.add_argument("--print", action="store_true", dest="print_info")
     args = parser.parse_args(argv)
+    if args.deployment_only and (
+        not args.software_stdin or args.update_hotspot or args.require_runtime
+    ):
+        parser.error(
+            "--deployment-only requires --software-stdin and excludes evaluation options"
+        )
     try:
         software = software_from_text(sys.stdin.read()) if args.software_stdin else None
         config_root = args.config_root or args.car_root
-        sections = refresh_info(
-            args.car_root,
-            software=software,
-            device_tree=args.device_tree,
-            config_root=config_root,
-        )
+        if args.deployment_only:
+            sections = publish_deployment(args.car_root, software)
+        else:
+            sections = refresh_info(
+                args.car_root,
+                software=software,
+                device_tree=args.device_tree,
+                config_root=config_root,
+            )
         content = render_info(sections)
         if args.update_hotspot:
             if sections["network"]["status"] != "ok":
@@ -393,6 +422,11 @@ def main(argv=None):
             )
         if args.print_info:
             print(content, end="")
+        if args.require_runtime and any(
+            sections[name]["status"] != "ok"
+            for name in ("configuration", "environment")
+        ):
+            return 1
         return 0
     except (
         OSError,

@@ -107,6 +107,6 @@ environment = os.environ.copy()
 environment["PYTHONPATH"] = str(root)
 subprocess.run(
     [sys.executable, "-m", "system.information.update", "--car-root", str(root),
-     "--software-stdin", "--print"], input=sys.stdin.read(), text=True,
+     "--software-stdin", "--deployment-only", "--print"], input=sys.stdin.read(), text=True,
     env=environment, check=True)
 """

@@ -151,8 +151,9 @@ See [joystick/README.md](joystick/README.md) for calibration and runtime usage.
 Firmware scalar validation lives in `configuration/firmware.py` and is shared
 with firmware tooling. Application configuration and hardware components can be
 imported without the management package or terminal UI. The driving entry point
-runs the central hardware and software evaluation after entering its Python
-environment, publishes `system/info.toml`, and displays the resulting statuses.
+enters its Python environment, validates the live configuration, and displays
+the saved boot evaluation from `system/info.toml` without probing hardware or
+repeating the dependency imports.
 
 ### Camera identity
 
@@ -161,8 +162,9 @@ exposes its sensor model. Both remain available after closing the camera and are
 logged during initialization and in camera hardware diagnostic reports.
 `camera_inventory()` in `car.src.camera.camera` returns Picamera2 camera
 information without acquiring a device. The central system evaluation persists
-all detected cameras under `camera.devices` in `system/info.toml`; startup shows
-that snapshot and warnings for missing devices or failed discovery. Detection
+all detected cameras under `camera.devices` in `system/info.toml` at Pi boot.
+The driving launcher shows that snapshot and warnings for missing devices or
+failed discovery. Detection
 does not verify frame capture; use the camera hardware diagnostic for that check.
 
 The ID identifies a connection, not a unique physical module serial number. It
